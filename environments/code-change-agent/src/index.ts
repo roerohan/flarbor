@@ -7,6 +7,17 @@ import type {
   TaskConfig,
   TrialResult,
 } from "flarbor";
+import {
+  run as scoreRun,
+  reward,
+  trialSuccess,
+  hasChanges,
+  noDeletions,
+  diffSize,
+  tokenBudget,
+  stepBudget,
+} from "flarbor-reward";
+import type { CriterionContext } from "flarbor-reward";
 
 interface Env extends FlarborEnv {
   FLARBOR_AGENT: DurableObjectNamespace;
@@ -18,7 +29,7 @@ interface Env extends FlarborEnv {
  * FlarborEnvironment provides the Think infrastructure (lifecycle hooks,
  * token tracking, error capture, session/tools wiring, chat recovery).
  * This class provides everything domain-specific: model, prompt, session
- * context, safety rules, and the task execution workflow.
+ * context, safety rules, the task execution workflow, and reward scoring.
  */
 export class FlarborAgent extends FlarborEnvironment<Env> {
   getEnvironmentConfig(): EnvironmentConfig {
@@ -55,12 +66,57 @@ export class FlarborAgent extends FlarborEnvironment<Env> {
   }
 
   /**
+   * Score the trial using flarbor-reward.
+   *
+   * Three reward dimensions:
+   * - Correctness: did the agent complete without errors and produce changes?
+   * - Precision: did the agent keep the diff focused and avoid unnecessary changes?
+   * - Efficiency: did the agent stay within token and step budgets?
+   */
+  private async scoreTrial(
+    ctx: CriterionContext,
+  ): Promise<Record<string, unknown>> {
+    const result = await scoreRun(
+      [
+        reward({
+          name: "correctness",
+          description: "Agent completed the task and produced changes",
+          criteria: [
+            trialSuccess(3.0),
+            hasChanges(2.0),
+            noDeletions(1.0),
+          ],
+        }),
+        reward({
+          name: "precision",
+          description: "Agent kept changes focused and minimal",
+          criteria: [
+            diffSize(10, 1.0),
+          ],
+        }),
+        reward({
+          name: "efficiency",
+          description: "Agent completed within resource budgets",
+          criteria: [
+            tokenBudget(100_000, 1.0),
+            stepBudget(undefined, 1.0),
+          ],
+        }),
+      ],
+      ctx,
+    );
+
+    return result as unknown as Record<string, unknown>;
+  }
+
+  /**
    * Execute a code change task end-to-end:
    * 1. Clone the repository
    * 2. Create a new branch
    * 3. Run the Think agentic loop with the instructions
    * 4. Validate the result
    * 5. Commit changes and push
+   * 6. Score the trial with flarbor-reward
    */
   async handleTask(task: TaskConfig): Promise<TrialResult> {
     console.log("[code-change-agent] handleTask started:", JSON.stringify({
@@ -101,7 +157,7 @@ export class FlarborAgent extends FlarborEnvironment<Env> {
 
     // Check if the turn was actually processed
     if (saveResult.status === "skipped") {
-      return {
+      const failResult: TrialResult = {
         success: false,
         branch,
         commitSha: "",
@@ -109,11 +165,20 @@ export class FlarborAgent extends FlarborEnvironment<Env> {
         error: "Inference turn was skipped (concurrent request collision)",
         usage: this.tokenUsage,
       };
+      failResult.reward = await this.scoreTrial({
+        workspace: this.workspace,
+        filesChanged: [],
+        success: false,
+        usage: this.tokenUsage,
+        error: failResult.error,
+        maxSteps: this.maxSteps,
+      });
+      return failResult;
     }
 
     // Check if the inference loop errored
     if (this.turnError) {
-      return {
+      const failResult: TrialResult = {
         success: false,
         branch,
         commitSha: "",
@@ -121,6 +186,15 @@ export class FlarborAgent extends FlarborEnvironment<Env> {
         error: this.turnError,
         usage: this.tokenUsage,
       };
+      failResult.reward = await this.scoreTrial({
+        workspace: this.workspace,
+        filesChanged: [],
+        success: false,
+        usage: this.tokenUsage,
+        error: this.turnError,
+        maxSteps: this.maxSteps,
+      });
+      return failResult;
     }
 
     // 4. Get changed files
@@ -129,7 +203,7 @@ export class FlarborAgent extends FlarborEnvironment<Env> {
     console.log("[code-change-agent] Step 4: Changed files:", filesChanged);
 
     if (filesChanged.length === 0) {
-      return {
+      const failResult: TrialResult = {
         success: false,
         branch,
         commitSha: "",
@@ -137,6 +211,15 @@ export class FlarborAgent extends FlarborEnvironment<Env> {
         error: "Agent made no changes to the repository",
         usage: this.tokenUsage,
       };
+      failResult.reward = await this.scoreTrial({
+        workspace: this.workspace,
+        filesChanged: [],
+        success: false,
+        usage: this.tokenUsage,
+        error: failResult.error,
+        maxSteps: this.maxSteps,
+      });
+      return failResult;
     }
 
     // 5. Commit and push
@@ -153,12 +236,24 @@ export class FlarborAgent extends FlarborEnvironment<Env> {
 
     console.log("[code-change-agent] Step 5: Push complete, commitSha:", commitSha);
 
+    // 6. Score the trial
+    console.log("[code-change-agent] Step 6: Scoring trial...");
+    const rewardResult = await this.scoreTrial({
+      workspace: this.workspace,
+      filesChanged,
+      success: true,
+      usage: this.tokenUsage,
+      maxSteps: this.maxSteps,
+    });
+    console.log("[code-change-agent] Step 6: Score complete");
+
     return {
       success: true,
       branch,
       commitSha,
       filesChanged,
       usage: this.tokenUsage,
+      reward: rewardResult,
     };
   }
 
