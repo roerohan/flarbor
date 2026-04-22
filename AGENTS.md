@@ -12,7 +12,7 @@ flarbor/
 ├── package.json                           # Root workspace config (npm workspaces)
 ├── pnpm-workspace.yaml                    # pnpm workspace definition
 ├── packages/
-│   └── flarbor/                           # Core library ("flarbor" on npm)
+│   ├── flarbor/                            # Core library ("flarbor" on npm)
 │       ├── package.json
 │       ├── tsconfig.json
 │       └── src/
@@ -21,6 +21,21 @@ flarbor/
 │           ├── agent-runner.ts            # runTask() helper for dispatching tasks to DOs
 │           ├── workspace.ts               # GitWorkspace class (Workspace + git handle)
 │           └── types.ts                   # Shared types (TaskConfig, TrialResult, etc.)
+│   └── flarbor-reward/                    # Reward/scoring kit ("flarbor-reward" on npm)
+│       ├── package.json
+│       ├── tsconfig.json
+│       └── src/
+│           ├── index.ts                   # Public API exports
+│           ├── types.ts                   # Criterion, Reward, RewardResult, JudgeConfig
+│           ├── criterion.ts               # criterion() builder for custom criteria
+│           ├── reward.ts                  # reward() builder + aggregation strategies
+│           ├── runner.ts                  # run() — main entry point for scoring trials
+│           ├── judge.ts                   # LLM-as-judge criterion
+│           └── criteria/
+│               ├── file.ts                # fileExists, fileContains, fileMatches, diffRatio
+│               ├── diff.ts                # hasChanges, diffSize, diffTouchesOnly, noDeletions
+│               ├── token.ts               # tokenBudget, tokenEfficiency, trialSuccess
+│               └── trajectory.ts          # stepBudget, touchedFile, didNotTouch, minFilesChanged
 └── environments/
     └── code-change-agent/                 # PoC environment: clone repo → Think → push
         ├── package.json
@@ -348,7 +363,7 @@ This alone gives you a working chat agent with streaming, persistence, workspace
 ### Phase 3: Eval Framework
 - [ ] Task definition format (equivalent to Harbor's `task.toml`)
 - [ ] Dataset support (collections of tasks)
-- [ ] `packages/flarbor-reward` — reward/scoring kit
+- [x] `packages/flarbor-reward` — reward/scoring kit
 - [ ] `environments/eval-runner` — run datasets against agents
 - [ ] Result collection and reporting
 
