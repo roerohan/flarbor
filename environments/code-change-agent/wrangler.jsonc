@@ -1,0 +1,37 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "code-change-agent",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-04-22",
+  "compatibility_flags": ["nodejs_compat", "experimental"],
+
+  // Workers AI binding for LLM inference
+  "ai": {
+    "binding": "AI"
+  },
+
+  // Durable Object: the FlarborAgent
+  "durable_objects": {
+    "bindings": [
+      {
+        "class_name": "FlarborAgent",
+        "name": "FLARBOR_AGENT"
+      }
+    ]
+  },
+
+  // SQLite-backed storage for the Durable Object
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["FlarborAgent"]
+    }
+  ],
+
+  // Dynamic Worker loader for sandboxed code execution
+  "worker_loaders": [
+    {
+      "binding": "LOADER"
+    }
+  ]
+}

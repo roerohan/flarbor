@@ -1,0 +1,26 @@
+{
+  "name": "code-change-agent",
+  "version": "0.0.1",
+  "private": true,
+  "description": "PoC environment: clone a repo, make LLM-driven changes, push to a new branch",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "flarbor": "workspace:*",
+    "@cloudflare/think": "latest",
+    "@cloudflare/shell": "latest",
+    "@cloudflare/codemode": "latest",
+    "agents": "latest",
+    "ai": "latest",
+    "workers-ai-provider": "latest",
+    "zod": "latest"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "latest",
+    "typescript": "^5.7.0",
+    "wrangler": "latest"
+  }
+}
