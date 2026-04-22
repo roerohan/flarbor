@@ -73,6 +73,16 @@ importers:
         specifier: ^5.7.0
         version: 5.9.3
 
+  packages/flarbor-reward:
+    dependencies:
+      ai:
+        specifier: latest
+        version: 6.0.168(zod@4.3.6)
+    devDependencies:
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
 packages:
 
   '@ai-sdk/gateway@3.0.104':
