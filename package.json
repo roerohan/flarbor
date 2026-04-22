@@ -1,0 +1,23 @@
+{
+  "name": "flarbor-monorepo",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Harbor alternative built on Cloudflare primitives",
+  "homepage": "https://github.com/roerohan/flarbor#readme",
+  "bugs": {
+    "url": "https://github.com/roerohan/flarbor/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/roerohan/flarbor.git"
+  },
+  "license": "ISC",
+  "workspaces": [
+    "packages/*",
+    "environments/*"
+  ],
+  "scripts": {
+    "dev": "pnpm --filter code-change-agent run dev",
+    "deploy": "pnpm --filter code-change-agent run deploy"
+  }
+}
