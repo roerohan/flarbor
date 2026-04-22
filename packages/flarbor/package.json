@@ -1,0 +1,24 @@
+{
+  "name": "flarbor",
+  "version": "0.0.1",
+  "description": "Harbor alternative built on Cloudflare primitives",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "license": "ISC",
+  "dependencies": {
+    "@cloudflare/codemode": "latest",
+    "@cloudflare/shell": "latest",
+    "@cloudflare/think": "latest",
+    "agents": "latest",
+    "ai": "latest",
+    "zod": "latest"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "latest",
+    "typescript": "^5.7.0"
+  }
+}
