@@ -37,6 +37,8 @@ export interface TrialResult {
   error?: string;
   /** Token usage across the entire task */
   usage?: TokenUsage;
+  /** Reward/scoring result from evaluating the trial output */
+  reward?: Record<string, unknown>;
 }
 
 /**

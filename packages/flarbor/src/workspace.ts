@@ -24,13 +24,19 @@ export class GitWorkspace {
 
   /**
    * Clone a repository into the workspace.
+   *
+   * Uses noCheckout + separate checkout to avoid a known isomorphic-git
+   * issue where lstat returns null for freshly-written files during
+   * checkout on virtual filesystems, causing TypeError noise in console.
    */
   async clone(repoUrl: string, token?: string): Promise<void> {
     await this.git.clone({
       url: repoUrl,
       depth: 1,
+      noCheckout: true,
       ...(token ? { token } : {}),
     });
+    await this.git.checkout({ ref: "HEAD" });
   }
 
   /**

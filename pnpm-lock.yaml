@@ -28,6 +28,9 @@ importers:
       flarbor:
         specifier: workspace:*
         version: link:../../packages/flarbor
+      flarbor-reward:
+        specifier: workspace:*
+        version: link:../../packages/flarbor-reward
       workers-ai-provider:
         specifier: latest
         version: 3.1.11(@ai-sdk/provider@3.0.8)(ai@6.0.168(zod@4.3.6))
@@ -69,6 +72,16 @@ importers:
       '@cloudflare/workers-types':
         specifier: latest
         version: 4.20260422.1
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
+  packages/flarbor-reward:
+    dependencies:
+      ai:
+        specifier: latest
+        version: 6.0.168(zod@4.3.6)
+    devDependencies:
       typescript:
         specifier: ^5.7.0
         version: 5.9.3
