@@ -12,7 +12,8 @@ you can compare latency and cost between the two platforms.
 # From repo root
 pnpm install
 
-# Set your GitHub token as a Wrangler secret
+# Set your secrets via Wrangler
+wrangler secret put ANTHROPIC_API_KEY --name code-change-agent
 wrangler secret put GITHUB_TOKEN --name code-change-agent
 ```
 
@@ -65,6 +66,7 @@ curl -X POST http://localhost:8787/run \
 ```bash
 export REPO_URL="https://github.com/org/repo"
 export GITHUB_TOKEN="ghp_..."
+export ANTHROPIC_API_KEY="sk-ant-..."
 export INSTRUCTION="Add error handling to the fetch calls in src/api.ts"
 export BRANCH="harbor/add-error-handling"
 
@@ -75,7 +77,7 @@ export BRANCH="harbor/add-error-handling"
 harbor run \
   -p environments/code-change-agent-harbor/task \
   --agent-import-path code_change_agent.agent:CodeChangeAgent \
-  -m "openrouter/moonshotai/kimi-k2.5" \
+  -m "anthropic/claude-opus-4-6" \
   --env docker
 ```
 
@@ -94,13 +96,13 @@ the same repo and instruction, then compare the outputs.
 
 ### LLM inference cost
 
-Both use the same model (`moonshotai/kimi-k2.5`). The cost per token depends on
-the provider:
+Both use the same model (`claude-opus-4-6`) calling the Anthropic API
+directly. The LLM cost per token is identical on both sides:
 
 | Provider | Used by | Pricing |
 |---|---|---|
-| **Workers AI** | Flarbor | [Workers AI pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/) — free tier available, then per-token |
-| **OpenRouter** (or any LiteLLM provider) | Harbor | [OpenRouter pricing](https://openrouter.ai/models) — per-token, varies by model |
+| **Anthropic API** (via `@ai-sdk/anthropic`) | Flarbor | [Anthropic pricing](https://www.anthropic.com/pricing) — $3/M input, $15/M output |
+| **Anthropic API** (via LiteLLM) | Harbor | [Anthropic pricing](https://www.anthropic.com/pricing) — $3/M input, $15/M output |
 
 To calculate LLM cost from a trial result:
 
@@ -120,7 +122,7 @@ This is where the two platforms diverge.
 | Durable Object storage (SQLite) | [$0.20/M reads, $1.00/M writes, $0.75/GB stored](https://developers.cloudflare.com/durable-objects/platform/pricing/) |
 | Worker invocation | [$0.30/M requests (first 10M free)](https://developers.cloudflare.com/workers/platform/pricing/) |
 | Dynamic Worker (code execution) | Included in DO compute |
-| Workers AI inference | [Per-token, model-dependent](https://developers.cloudflare.com/workers-ai/platform/pricing/) |
+| Anthropic API (LLM) | [Per-token](https://www.anthropic.com/pricing) — same cost as Harbor |
 | **Idle cost** | **$0** — DOs hibernate when unused |
 
 **Harbor (Docker):**
@@ -131,7 +133,7 @@ This is where the two platforms diverge.
 | Cloud sandbox (Daytona) | [Per-workspace-minute](https://www.daytona.io/pricing) |
 | Cloud sandbox (Modal) | [$0.192/hr/CPU + memory](https://modal.com/pricing) |
 | Cloud sandbox (E2B) | [Per-sandbox-second](https://e2b.dev/pricing) |
-| LLM API (OpenRouter/etc.) | Per-token, provider-dependent |
+| Anthropic API (LLM) | [Per-token](https://www.anthropic.com/pricing) — same cost as Flarbor |
 | **Idle cost** | **$0** locally, per-second if using cloud sandboxes |
 
 ### Running a comparison
@@ -170,7 +172,7 @@ time ./run.sh
 |---|---|---|
 | **Wall-clock latency** | `time curl ...` / `time ./run.sh` | Includes cold start, clone, LLM turns, push |
 | **LLM tokens** | `usage.inputTokens` + `usage.outputTokens` from result JSON | Should be similar if same model + same prompt |
-| **LLM cost** | tokens x per-token rate | Depends on provider; Workers AI vs OpenRouter |
+| **LLM cost** | tokens x per-token rate | Same provider (Anthropic) on both sides |
 | **Compute cost** | See pricing tables | Flarbor: DO duration; Harbor: container runtime |
 | **Cold start** | First request after deploy (Flarbor) / Docker build (Harbor) | Flarbor: ~50-200ms DO startup; Harbor: 10-60s container build+start |
 | **Files changed** | `filesChanged` in result JSON | Should be identical for the same task |
@@ -178,8 +180,8 @@ time ./run.sh
 
 ### Apples-to-apples tips
 
-- Use the **same model** on both sides. The default is `moonshotai/kimi-k2.5`
-  via Workers AI (Flarbor) and OpenRouter (Harbor).
+- Use the **same model** on both sides. The default is `claude-opus-4-6`
+  via direct Anthropic API (both Flarbor and Harbor).
 - Use the **same instruction** and **same repo** for each pair of runs.
 - Run **multiple trials** (3-5) per side and take the median. LLM output is
   non-deterministic, so a single run is not statistically meaningful.

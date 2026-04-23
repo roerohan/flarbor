@@ -107,7 +107,8 @@ export interface EnvironmentConfig {
  * Each environment's wrangler.jsonc should provide these.
  */
 export interface FlarborEnv {
-  AI: Ai;
+  AI?: Ai;
   LOADER: WorkerLoader;
   GITHUB_TOKEN?: string;
+  ANTHROPIC_API_KEY?: string;
 }

@@ -8,7 +8,7 @@ Workflow:
   4. Commit changes and push to the remote
 
 The agent uses LiteLLM for model inference (matching Flarbor's use of
-Workers AI with @cf/moonshotai/kimi-k2.5). It implements its own
+Anthropic claude-opus-4-6 via @ai-sdk/anthropic). It implements its own
 tool-calling loop: the LLM receives tool definitions (read_file,
 write_file, edit_file, delete_file, find_files, grep_files, list_dir,
 execute_command), calls them via tool_calls, and the agent executes
@@ -312,7 +312,7 @@ class CodeChangeAgent(BaseAgent):
         author_email = os.environ.get("AUTHOR_EMAIL", "agent@harbor.dev")
         max_steps = int(os.environ.get("MAX_STEPS", "30"))
         model_name = self.model_name or os.environ.get(
-            "MODEL_NAME", "openrouter/moonshotai/kimi-k2.5"
+            "MODEL_NAME", "anthropic/claude-opus-4-6"
         )
 
         if not repo_url:

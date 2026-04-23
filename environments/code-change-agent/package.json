@@ -15,7 +15,7 @@
     "@cloudflare/codemode": "latest",
     "agents": "latest",
     "ai": "latest",
-    "workers-ai-provider": "latest",
+    "@ai-sdk/anthropic": "latest",
     "zod": "latest"
   },
   "devDependencies": {

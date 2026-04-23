@@ -7,7 +7,7 @@
 #   export GITHUB_TOKEN="ghp_..."
 #   export INSTRUCTION="Add error handling to the fetch calls in src/api.ts"
 #   export BRANCH="harbor/add-error-handling"            # optional
-#   export MODEL_NAME="openrouter/moonshotai/kimi-k2.5"  # optional
+#   export MODEL_NAME="anthropic/claude-opus-4-6"  # optional
 #   ./run.sh
 #
 # Prerequisites:
@@ -40,7 +40,7 @@ fi
 printf '%s\n' "$INSTRUCTION" > "${TASK_DIR}/instruction.md"
 
 # Default model
-MODEL_NAME="${MODEL_NAME:-openrouter/moonshotai/kimi-k2.5}"
+MODEL_NAME="${MODEL_NAME:-anthropic/claude-opus-4-6}"
 
 echo "=== Harbor Code Change Agent ==="
 echo "Repo:        ${REPO_URL}"

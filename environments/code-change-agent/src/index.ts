@@ -1,4 +1,4 @@
-import { createWorkersAI } from "workers-ai-provider";
+import { createAnthropic } from "@ai-sdk/anthropic";
 import { routeAgentRequest } from "agents";
 import { FlarborEnvironment, runTask } from "flarbor";
 import type {
@@ -23,9 +23,9 @@ interface Env extends FlarborEnv {
 export class FlarborAgent extends FlarborEnvironment<Env> {
   getEnvironmentConfig(): EnvironmentConfig {
     return {
-      model: createWorkersAI({ binding: this.env.AI })(
-        "@cf/moonshotai/kimi-k2.5",
-      ),
+      model: createAnthropic({
+        apiKey: this.env.ANTHROPIC_API_KEY,
+      })("claude-opus-4-6"),
 
       systemPrompt: [
         "You are a code modification agent. You have access to a cloned git repository in your workspace.",
