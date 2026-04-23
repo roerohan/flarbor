@@ -10,9 +10,9 @@ Workflow:
 The agent uses LiteLLM for model inference (matching Flarbor's use of
 Workers AI with @cf/moonshotai/kimi-k2.5). It implements its own
 tool-calling loop: the LLM receives tool definitions (read_file,
-write_file, edit_file, find_files, grep_files, list_dir, execute_command),
-calls them via tool_calls, and the agent executes each tool inside the
-Docker container via environment.exec().
+write_file, edit_file, delete_file, find_files, grep_files, list_dir,
+execute_command), calls them via tool_calls, and the agent executes
+each tool inside the Docker container via environment.exec().
 
 Environment variables required:
   REPO_URL        — Repository URL to clone
@@ -26,9 +26,12 @@ Environment variables required:
 
 from __future__ import annotations
 
+import base64
+import fnmatch
 import json
 import logging
 import os
+import shlex
 import time
 from pathlib import Path
 from typing import Any
@@ -42,6 +45,17 @@ from harbor.models.agent.context import AgentContext
 litellm.suppress_debug_info = True
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+
+# Working directory inside the container where the repo is cloned.
+WORKDIR = "/home/agent/repo"
+
+# Protected path patterns — matches Flarbor's protectedPaths config exactly.
+# Uses glob syntax: * matches anything except /, ** matches everything.
+PROTECTED_PATTERNS = [".git/**", ".github/workflows/**"]
 
 # ---------------------------------------------------------------------------
 # Tool definitions (OpenAI function-calling format)
@@ -58,7 +72,7 @@ TOOLS: list[dict[str, Any]] = [
                 "properties": {
                     "path": {
                         "type": "string",
-                        "description": "Absolute path to the file to read.",
+                        "description": f"Absolute path to the file to read (repo root is {WORKDIR}).",
                     }
                 },
                 "required": ["path"],
@@ -75,7 +89,7 @@ TOOLS: list[dict[str, Any]] = [
                 "properties": {
                     "path": {
                         "type": "string",
-                        "description": "Absolute path to the file to write.",
+                        "description": f"Absolute path to the file to write (repo root is {WORKDIR}).",
                     },
                     "content": {
                         "type": "string",
@@ -96,7 +110,7 @@ TOOLS: list[dict[str, Any]] = [
                 "properties": {
                     "path": {
                         "type": "string",
-                        "description": "Absolute path to the file to edit.",
+                        "description": f"Absolute path to the file to edit (repo root is {WORKDIR}).",
                     },
                     "old_string": {
                         "type": "string",
@@ -114,6 +128,23 @@ TOOLS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
+            "name": "delete_file",
+            "description": "Delete a file at the given path.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": f"Absolute path to the file to delete (repo root is {WORKDIR}).",
+                    },
+                },
+                "required": ["path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "find_files",
             "description": "Find files matching a glob pattern in the repository.",
             "parameters": {
@@ -125,7 +156,7 @@ TOOLS: list[dict[str, Any]] = [
                     },
                     "path": {
                         "type": "string",
-                        "description": "Directory to search in. Defaults to /app.",
+                        "description": f"Directory to search in. Defaults to {WORKDIR}.",
                     },
                 },
                 "required": ["pattern"],
@@ -146,7 +177,7 @@ TOOLS: list[dict[str, Any]] = [
                     },
                     "path": {
                         "type": "string",
-                        "description": "Directory to search in. Defaults to /app.",
+                        "description": f"Directory to search in. Defaults to {WORKDIR}.",
                     },
                     "include": {
                         "type": "string",
@@ -167,7 +198,7 @@ TOOLS: list[dict[str, Any]] = [
                 "properties": {
                     "path": {
                         "type": "string",
-                        "description": "Absolute path to the directory to list.",
+                        "description": f"Absolute path to the directory to list (repo root is {WORKDIR}).",
                     },
                 },
                 "required": ["path"],
@@ -193,30 +224,58 @@ TOOLS: list[dict[str, Any]] = [
     },
 ]
 
-# Protected paths — agent cannot modify these
-PROTECTED_PATHS = [".git/", ".github/workflows/"]
-
-SYSTEM_PROMPT = """\
-You are a code modification agent. You have access to a cloned git repository at /app.
-Use the provided tools (read_file, write_file, edit_file, find_files, grep_files, list_dir, execute_command) to understand the codebase and make the requested changes.
+SYSTEM_PROMPT = f"""\
+You are a code modification agent. You have access to a cloned git repository at {WORKDIR}.
+Use the provided tools (read_file, write_file, edit_file, delete_file, find_files, grep_files, list_dir, execute_command) to understand the codebase and make the requested changes.
 Use the execute_command tool to run shell commands when you need to process multiple files or do complex operations.
 Be precise and make only the changes requested. Do not modify files unnecessarily.
 When you are done, summarize what you changed and why.\
 """
 
 
-def _is_protected(path: str) -> bool:
-    """Check if a path falls under a protected directory."""
-    for prefix in PROTECTED_PATHS:
-        if path.startswith(f"/app/{prefix}") or path.startswith(prefix):
+# ---------------------------------------------------------------------------
+# Protected-path matching — mirrors Flarbor's matchesProtectedPath()
+# ---------------------------------------------------------------------------
+
+
+def _matches_protected_path(filepath: str) -> bool:
+    """
+    Check if *filepath* matches any of the PROTECTED_PATTERNS.
+
+    Mirrors Flarbor's ``matchesProtectedPath`` in environment.ts which
+    converts glob patterns like ``.git/**`` into regexes where ``*``
+    matches ``[^/]*`` and ``**`` matches ``.*``.
+
+    Python's ``fnmatch`` uses the same single-star / double-star
+    semantics, so we can delegate to it directly.
+
+    The filepath may be absolute (``/home/agent/repo/.git/config``) or
+    relative (``.git/config``).  We normalise to a repo-relative path
+    before matching.
+    """
+    # Normalise to repo-relative
+    rel = filepath
+    if rel.startswith(WORKDIR + "/"):
+        rel = rel[len(WORKDIR) + 1 :]
+    elif rel.startswith("/"):
+        # Some other absolute path — not inside the repo, leave as-is.
+        pass
+
+    for pattern in PROTECTED_PATTERNS:
+        if fnmatch.fnmatch(rel, pattern):
             return True
     return False
+
+
+# ---------------------------------------------------------------------------
+# Agent
+# ---------------------------------------------------------------------------
 
 
 class CodeChangeAgent(BaseAgent):
     """
     Harbor agent that clones a repo, uses an LLM to make code changes
-    via tool calls, then commits and pushes. Mirrors the Flarbor
+    via tool calls, then commits and pushes.  Mirrors the Flarbor
     code-change-agent's workflow exactly.
     """
 
@@ -248,7 +307,7 @@ class CodeChangeAgent(BaseAgent):
         """
         repo_url = os.environ.get("REPO_URL", "")
         github_token = os.environ.get("GITHUB_TOKEN", "")
-        branch = os.environ.get("BRANCH", f"harbor/{int(time.time()):x}")
+        branch = os.environ.get("BRANCH", "") or f"harbor/{int(time.time()):x}"
         author_name = os.environ.get("AUTHOR_NAME", "Harbor Agent")
         author_email = os.environ.get("AUTHOR_EMAIL", "agent@harbor.dev")
         max_steps = int(os.environ.get("MAX_STEPS", "30"))
@@ -269,12 +328,12 @@ class CodeChangeAgent(BaseAgent):
         logger.info("[code-change-agent-harbor] Step 1: Cloning repository...")
         clone_url = repo_url
         if github_token:
-            # Insert token into HTTPS URL for authentication
+            # Insert token into HTTPS URL for authentication.
             clone_url = repo_url.replace(
                 "https://", f"https://x-access-token:{github_token}@"
             )
         result = await environment.exec(
-            command=f"git clone --depth 1 {clone_url} /app",
+            command=f"git clone --depth 1 {shlex.quote(clone_url)} {WORKDIR}",
             timeout_sec=120,
         )
         if result.return_code != 0:
@@ -288,8 +347,8 @@ class CodeChangeAgent(BaseAgent):
             "[code-change-agent-harbor] Step 2: Creating branch: %s", branch
         )
         result = await environment.exec(
-            command=f"git checkout -b {branch}",
-            cwd="/app",
+            command=f"git checkout -b {shlex.quote(branch)}",
+            cwd=WORKDIR,
         )
         if result.return_code != 0:
             raise RuntimeError(
@@ -362,7 +421,7 @@ class CodeChangeAgent(BaseAgent):
                     {
                         "role": "tool",
                         "tool_call_id": tool_call.id,
-                        "content": tool_result[:50000],  # Truncate large outputs
+                        "content": tool_result[:50_000],  # Truncate large outputs
                     }
                 )
         else:
@@ -379,15 +438,15 @@ class CodeChangeAgent(BaseAgent):
         )
         result = await environment.exec(
             command="git diff --name-only HEAD",
-            cwd="/app",
+            cwd=WORKDIR,
         )
         # Also check untracked files
         untracked = await environment.exec(
             command="git ls-files --others --exclude-standard",
-            cwd="/app",
+            cwd=WORKDIR,
         )
 
-        changed_files = []
+        changed_files: list[str] = []
         if result.stdout:
             changed_files.extend(result.stdout.strip().split("\n"))
         if untracked.stdout:
@@ -403,7 +462,6 @@ class CodeChangeAgent(BaseAgent):
             logger.warning(
                 "[code-change-agent-harbor] Agent made no changes to the repository"
             )
-            # Write result metadata to logs
             self._write_result_log(
                 success=False,
                 branch=branch,
@@ -425,21 +483,21 @@ class CodeChangeAgent(BaseAgent):
 
         # Configure git user
         await environment.exec(
-            command=f'git config user.name "{author_name}"',
-            cwd="/app",
+            command=f"git config user.name {shlex.quote(author_name)}",
+            cwd=WORKDIR,
         )
         await environment.exec(
-            command=f'git config user.email "{author_email}"',
-            cwd="/app",
+            command=f"git config user.email {shlex.quote(author_email)}",
+            cwd=WORKDIR,
         )
 
         # Stage all changes
-        await environment.exec(command="git add -A", cwd="/app")
+        await environment.exec(command="git add -A", cwd=WORKDIR)
 
-        # Commit
+        # Commit (use shlex.quote to avoid shell injection from instruction text)
         result = await environment.exec(
-            command=f'git commit -m "{commit_message}"',
-            cwd="/app",
+            command=f"git commit -m {shlex.quote(commit_message)}",
+            cwd=WORKDIR,
         )
         if result.return_code != 0:
             raise RuntimeError(
@@ -449,19 +507,34 @@ class CodeChangeAgent(BaseAgent):
         # Get commit SHA
         sha_result = await environment.exec(
             command="git rev-parse HEAD",
-            cwd="/app",
+            cwd=WORKDIR,
         )
         commit_sha = (sha_result.stdout or "").strip()
 
-        # Push if we have a token
+        # Push if we have a token.
+        # Use git credential helper via env var to avoid leaking the token
+        # in process args or log output.
         if github_token:
             push_url = repo_url.replace(
                 "https://", f"https://x-access-token:{github_token}@"
             )
+            # Set the remote URL (with embedded token) temporarily, push,
+            # then reset it.  This keeps the token out of the command line
+            # visible in `ps` output (it's only in the git config which is
+            # local to the container).
+            await environment.exec(
+                command=f"git remote set-url origin {shlex.quote(push_url)}",
+                cwd=WORKDIR,
+            )
             result = await environment.exec(
-                command=f"git push {push_url} {branch}",
-                cwd="/app",
+                command=f"git push origin {shlex.quote(branch)}",
+                cwd=WORKDIR,
                 timeout_sec=120,
+            )
+            # Reset remote URL to the original (strip token)
+            await environment.exec(
+                command=f"git remote set-url origin {shlex.quote(repo_url)}",
+                cwd=WORKDIR,
             )
             if result.return_code != 0:
                 raise RuntimeError(
@@ -492,6 +565,10 @@ class CodeChangeAgent(BaseAgent):
             output_tokens=total_output_tokens,
         )
 
+    # ------------------------------------------------------------------
+    # Tool dispatch
+    # ------------------------------------------------------------------
+
     async def _execute_tool(
         self,
         name: str,
@@ -499,31 +576,35 @@ class CodeChangeAgent(BaseAgent):
         environment: BaseEnvironment,
     ) -> str:
         """Execute a tool call inside the Docker container."""
+        handlers = {
+            "read_file": self._tool_read_file,
+            "write_file": self._tool_write_file,
+            "edit_file": self._tool_edit_file,
+            "delete_file": self._tool_delete_file,
+            "find_files": self._tool_find_files,
+            "grep_files": self._tool_grep_files,
+            "list_dir": self._tool_list_dir,
+            "execute_command": self._tool_execute_command,
+        }
+        handler = handlers.get(name)
+        if handler is None:
+            return f"Error: Unknown tool '{name}'"
         try:
-            if name == "read_file":
-                return await self._tool_read_file(args, environment)
-            elif name == "write_file":
-                return await self._tool_write_file(args, environment)
-            elif name == "edit_file":
-                return await self._tool_edit_file(args, environment)
-            elif name == "find_files":
-                return await self._tool_find_files(args, environment)
-            elif name == "grep_files":
-                return await self._tool_grep_files(args, environment)
-            elif name == "list_dir":
-                return await self._tool_list_dir(args, environment)
-            elif name == "execute_command":
-                return await self._tool_execute_command(args, environment)
-            else:
-                return f"Error: Unknown tool '{name}'"
+            return await handler(args, environment)
         except Exception as e:
             return f"Error executing {name}: {e}"
+
+    # ------------------------------------------------------------------
+    # Tool implementations
+    # ------------------------------------------------------------------
 
     async def _tool_read_file(
         self, args: dict[str, Any], env: BaseEnvironment
     ) -> str:
         path = args["path"]
-        result = await env.exec(command=f"cat {_shell_quote(path)}", cwd="/app")
+        result = await env.exec(
+            command=f"cat {shlex.quote(path)}", cwd=WORKDIR
+        )
         if result.return_code != 0:
             return f"Error reading {path}: {result.stderr or 'file not found'}"
         return result.stdout or ""
@@ -533,16 +614,18 @@ class CodeChangeAgent(BaseAgent):
     ) -> str:
         path = args["path"]
         content = args["content"]
-        if _is_protected(path):
-            return f"Error: Path '{path}' is protected and cannot be modified."
-        # Use a heredoc to write content safely
-        # Encode content as base64 to avoid shell escaping issues
-        import base64
+        if _matches_protected_path(path):
+            return f"Error: Path \"{path}\" is protected and cannot be modified."
 
+        # Encode content as base64 and pipe through stdin to avoid
+        # shell ARG_MAX limits on large files.
         encoded = base64.b64encode(content.encode()).decode()
         result = await env.exec(
-            command=f"mkdir -p $(dirname {_shell_quote(path)}) && echo '{encoded}' | base64 -d > {_shell_quote(path)}",
-            cwd="/app",
+            command=(
+                f"mkdir -p \"$(dirname {shlex.quote(path)})\" "
+                f"&& printf '%s' {shlex.quote(encoded)} | base64 -d > {shlex.quote(path)}"
+            ),
+            cwd=WORKDIR,
         )
         if result.return_code != 0:
             return f"Error writing {path}: {result.stderr}"
@@ -554,52 +637,79 @@ class CodeChangeAgent(BaseAgent):
         path = args["path"]
         old_string = args["old_string"]
         new_string = args["new_string"]
-        if _is_protected(path):
-            return f"Error: Path '{path}' is protected and cannot be modified."
-        # Read the file, do the replacement in Python, write it back
+        if _matches_protected_path(path):
+            return f"Error: Path \"{path}\" is protected and cannot be modified."
+
+        # Read the file
         read_result = await env.exec(
-            command=f"cat {_shell_quote(path)}", cwd="/app"
+            command=f"cat {shlex.quote(path)}", cwd=WORKDIR
         )
         if read_result.return_code != 0:
             return (
                 f"Error reading {path}: {read_result.stderr or 'file not found'}"
             )
         content = read_result.stdout or ""
+
         if old_string not in content:
             return f"Error: old_string not found in {path}"
         count = content.count(old_string)
         if count > 1:
-            return f"Error: Found {count} matches for old_string in {path}. Provide more context to identify the correct match."
-        new_content = content.replace(old_string, new_string, 1)
-        # Write back using base64 to avoid escaping issues
-        import base64
+            return (
+                f"Error: Found {count} matches for old_string in {path}. "
+                "Provide more context to identify the correct match."
+            )
 
+        new_content = content.replace(old_string, new_string, 1)
+
+        # Write back via base64 to avoid escaping issues and ARG_MAX.
         encoded = base64.b64encode(new_content.encode()).decode()
         write_result = await env.exec(
-            command=f"echo '{encoded}' | base64 -d > {_shell_quote(path)}",
-            cwd="/app",
+            command=(
+                f"printf '%s' {shlex.quote(encoded)} | base64 -d > {shlex.quote(path)}"
+            ),
+            cwd=WORKDIR,
         )
         if write_result.return_code != 0:
             return f"Error writing {path}: {write_result.stderr}"
         return f"Successfully edited {path}"
 
+    async def _tool_delete_file(
+        self, args: dict[str, Any], env: BaseEnvironment
+    ) -> str:
+        path = args["path"]
+        if _matches_protected_path(path):
+            return f"Error: Path \"{path}\" is protected and cannot be modified."
+        result = await env.exec(
+            command=f"rm {shlex.quote(path)}", cwd=WORKDIR
+        )
+        if result.return_code != 0:
+            return f"Error deleting {path}: {result.stderr or 'file not found'}"
+        return f"Successfully deleted {path}"
+
     async def _tool_find_files(
         self, args: dict[str, Any], env: BaseEnvironment
     ) -> str:
         pattern = args["pattern"]
-        search_path = args.get("path", "/app")
+        search_path = args.get("path", WORKDIR)
         # Use find with -name or -path depending on the pattern
         if "**" in pattern or "/" in pattern:
-            # Convert glob to find pattern
             find_pattern = pattern.replace("**", "*")
             result = await env.exec(
-                command=f"find {_shell_quote(search_path)} -path {_shell_quote(find_pattern)} -type f 2>/dev/null | head -200",
-                cwd="/app",
+                command=(
+                    f"find {shlex.quote(search_path)} "
+                    f"-path {shlex.quote(find_pattern)} "
+                    "-type f 2>/dev/null | head -200"
+                ),
+                cwd=WORKDIR,
             )
         else:
             result = await env.exec(
-                command=f"find {_shell_quote(search_path)} -name {_shell_quote(pattern)} -type f 2>/dev/null | head -200",
-                cwd="/app",
+                command=(
+                    f"find {shlex.quote(search_path)} "
+                    f"-name {shlex.quote(pattern)} "
+                    "-type f 2>/dev/null | head -200"
+                ),
+                cwd=WORKDIR,
             )
         if result.return_code != 0:
             return f"Error: {result.stderr}"
@@ -609,14 +719,21 @@ class CodeChangeAgent(BaseAgent):
         self, args: dict[str, Any], env: BaseEnvironment
     ) -> str:
         pattern = args["pattern"]
-        search_path = args.get("path", "/app")
+        search_path = args.get("path", WORKDIR)
         include = args.get("include", "")
-        include_flag = f"--include={_shell_quote(include)}" if include else ""
-        result = await env.exec(
-            command=f"grep -rn {include_flag} {_shell_quote(pattern)} {_shell_quote(search_path)} 2>/dev/null | head -200",
-            cwd="/app",
+        include_flag = (
+            f"--include={shlex.quote(include)}" if include else ""
         )
-        if result.return_code not in (0, 1):
+        result = await env.exec(
+            command=(
+                f"grep -rn {include_flag} "
+                f"{shlex.quote(pattern)} "
+                f"{shlex.quote(search_path)} "
+                "2>/dev/null | head -200"
+            ),
+            cwd=WORKDIR,
+        )
+        if result.return_code not in (0, 1):  # 1 = no matches (normal)
             return f"Error: {result.stderr}"
         return result.stdout or "No matches found."
 
@@ -625,8 +742,8 @@ class CodeChangeAgent(BaseAgent):
     ) -> str:
         path = args["path"]
         result = await env.exec(
-            command=f"ls -la {_shell_quote(path)} 2>/dev/null",
-            cwd="/app",
+            command=f"ls -la {shlex.quote(path)} 2>/dev/null",
+            cwd=WORKDIR,
         )
         if result.return_code != 0:
             return f"Error listing {path}: {result.stderr or 'directory not found'}"
@@ -636,7 +753,7 @@ class CodeChangeAgent(BaseAgent):
         self, args: dict[str, Any], env: BaseEnvironment
     ) -> str:
         command = args["command"]
-        result = await env.exec(command=command, cwd="/app", timeout_sec=60)
+        result = await env.exec(command=command, cwd=WORKDIR, timeout_sec=60)
         output = ""
         if result.stdout:
             output += result.stdout
@@ -644,6 +761,10 @@ class CodeChangeAgent(BaseAgent):
             output += f"\nSTDERR: {result.stderr}"
         output += f"\nExit code: {result.return_code}"
         return output or "Command completed with no output."
+
+    # ------------------------------------------------------------------
+    # Result logging
+    # ------------------------------------------------------------------
 
     def _write_result_log(
         self,
@@ -656,7 +777,7 @@ class CodeChangeAgent(BaseAgent):
         output_tokens: int = 0,
     ) -> None:
         """Write a JSON result log to the logs directory (mirrors Flarbor's TrialResult)."""
-        result = {
+        result: dict[str, Any] = {
             "success": success,
             "branch": branch,
             "commitSha": commit_sha,
@@ -672,10 +793,3 @@ class CodeChangeAgent(BaseAgent):
 
         log_path = self.logs_dir / "trial_result.json"
         log_path.write_text(json.dumps(result, indent=2))
-
-
-def _shell_quote(s: str) -> str:
-    """Quote a string for safe use in shell commands."""
-    import shlex
-
-    return shlex.quote(s)

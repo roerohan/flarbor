@@ -16,7 +16,6 @@ timeout_sec = 30.0
 
 [agent]
 timeout_sec = 600.0
-user = "agent"
 
 [environment]
 build_timeout_sec = 300.0

@@ -6,8 +6,8 @@
 #   export REPO_URL="https://github.com/org/repo"
 #   export GITHUB_TOKEN="ghp_..."
 #   export INSTRUCTION="Add error handling to the fetch calls in src/api.ts"
-#   export BRANCH="harbor/add-error-handling"          # optional
-#   export MODEL_NAME="openrouter/moonshotai/kimi-k2.5" # optional
+#   export BRANCH="harbor/add-error-handling"            # optional
+#   export MODEL_NAME="openrouter/moonshotai/kimi-k2.5"  # optional
 #   ./run.sh
 #
 # Prerequisites:
@@ -35,8 +35,9 @@ if [ -z "${INSTRUCTION:-}" ]; then
     exit 1
 fi
 
-# Write the instruction to instruction.md so Harbor picks it up
-echo "$INSTRUCTION" > "${TASK_DIR}/instruction.md"
+# Write the instruction to instruction.md so Harbor reads it and passes
+# the content to agent.run(instruction, ...).
+printf '%s\n' "$INSTRUCTION" > "${TASK_DIR}/instruction.md"
 
 # Default model
 MODEL_NAME="${MODEL_NAME:-openrouter/moonshotai/kimi-k2.5}"
@@ -59,7 +60,7 @@ harbor run \
     --env docker
 
 END_TIME=$(python3 -c "import time; print(time.time())")
-ELAPSED=$(python3 -c "print(f'{${END_TIME} - ${START_TIME}:.2f}')")
+ELAPSED=$(python3 -c "print(f'{float($END_TIME) - float($START_TIME):.2f}')")
 
 echo ""
 echo "=== Timing ==="

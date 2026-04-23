@@ -1,3 +1,3 @@
-Make code changes to the repository according to the instructions provided via the INSTRUCTION environment variable.
+Make code changes to the repository according to the instructions provided via the REPO_URL and task-specific instruction environment variables.
 
-The repository has already been cloned into /app by the agent. Examine the codebase and implement the requested changes.
+The agent will clone the repository, apply the requested changes using LLM-driven tool calls, and push the result to a new branch.

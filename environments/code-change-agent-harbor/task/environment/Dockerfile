@@ -14,9 +14,10 @@ RUN git config --global init.defaultBranch main \
 # Create a non-root user for the agent
 RUN useradd -m -s /bin/bash agent
 
-# Create working directory and logs directory
-RUN mkdir -p /app /logs/agent /logs/verifier \
-    && chown -R agent:agent /app /logs
+# Create logs directory (NOT /app — git clone needs it to not exist)
+RUN mkdir -p /logs/agent /logs/verifier \
+    && chown -R agent:agent /logs
 
+# Let the agent own /home/agent where clone will happen if /app fails
 USER agent
-WORKDIR /app
+WORKDIR /home/agent
