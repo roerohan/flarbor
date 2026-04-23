@@ -19,5 +19,8 @@
   "scripts": {
     "dev": "pnpm --filter code-change-agent run dev",
     "deploy": "pnpm --filter code-change-agent run deploy"
+  },
+  "dependencies": {
+    "wrangler": "^4.84.1"
   }
 }
