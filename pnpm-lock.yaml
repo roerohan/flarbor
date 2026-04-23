@@ -14,6 +14,9 @@ importers:
 
   environments/code-change-agent:
     dependencies:
+      '@ai-sdk/anthropic':
+        specifier: latest
+        version: 3.0.71(zod@4.3.6)
       '@cloudflare/codemode':
         specifier: latest
         version: 0.3.4(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.3.6))(ai@6.0.168(zod@4.3.6))(zod@4.3.6)
@@ -32,9 +35,6 @@ importers:
       flarbor:
         specifier: workspace:*
         version: link:../../packages/flarbor
-      workers-ai-provider:
-        specifier: latest
-        version: 3.1.11(@ai-sdk/provider@3.0.8)(ai@6.0.168(zod@4.3.6))
       zod:
         specifier: latest
         version: 4.3.6
@@ -78,6 +78,12 @@ importers:
         version: 5.9.3
 
 packages:
+
+  '@ai-sdk/anthropic@3.0.71':
+    resolution: {integrity: sha512-bUWOzrzR0gJKJO/PLGMR4uH2dqEgqGhrsCV+sSpk4KtOEnUQlfjZI/F7BFlqSvVpFbjdgYRRLysAeEZpJ6S1lg==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.25.76 || ^4.1.8
 
   '@ai-sdk/gateway@3.0.104':
     resolution: {integrity: sha512-ZKX5n74io8VIRlhIMSLWVlvT3sXC8Z7cZ9GHuWBWZDVi96+62AIsWuLGvMfcBA1STYuSoDrp6rIziZmvrTq0TA==}
@@ -1528,12 +1534,6 @@ packages:
     engines: {node: '>=16'}
     hasBin: true
 
-  workers-ai-provider@3.1.11:
-    resolution: {integrity: sha512-+J2dfbSs3r/DUEzo2buhBuomTrz/kHd063vqz3qsZjZFmnprlE82TLqWfB1jb+AGBCiygQ1J4EimCLy9ZU7QMQ==}
-    peerDependencies:
-      '@ai-sdk/provider': ^3.0.0
-      ai: ^6.0.0
-
   wrangler@4.84.1:
     resolution: {integrity: sha512-Xe1S/Bik7pNdtdJ+asHsEZC2dX9k3WxYn2BbxFtOrrLVxN/LKi750zsrjX41jSAk00M/O1l7jzyQV4sQqw8ftg==}
     engines: {node: '>=20.3.0'}
@@ -1593,6 +1593,12 @@ packages:
     resolution: {integrity: sha512-rftlrkhHZOcjDwkGlnUtZZkvaPHCsDATp4pGpuOOMDaTdDDXF91wuVDJoWoPsKX/3YPQ5fHuF3STjcYyKr+Qhg==}
 
 snapshots:
+
+  '@ai-sdk/anthropic@3.0.71(zod@4.3.6)':
+    dependencies:
+      '@ai-sdk/provider': 3.0.8
+      '@ai-sdk/provider-utils': 4.0.23(zod@4.3.6)
+      zod: 4.3.6
 
   '@ai-sdk/gateway@3.0.104(zod@4.3.6)':
     dependencies:
@@ -2965,11 +2971,6 @@ snapshots:
       '@cloudflare/workerd-linux-64': 1.20260421.1
       '@cloudflare/workerd-linux-arm64': 1.20260421.1
       '@cloudflare/workerd-windows-64': 1.20260421.1
-
-  workers-ai-provider@3.1.11(@ai-sdk/provider@3.0.8)(ai@6.0.168(zod@4.3.6)):
-    dependencies:
-      '@ai-sdk/provider': 3.0.8
-      ai: 6.0.168(zod@4.3.6)
 
   wrangler@4.84.1(@cloudflare/workers-types@4.20260423.1):
     dependencies:

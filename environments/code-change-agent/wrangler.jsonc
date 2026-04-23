@@ -3,7 +3,7 @@
   "name": "code-change-agent",
   "main": "src/index.ts",
   "compatibility_date": "2026-04-22",
-  "compatibility_flags": ["nodejs_compat", "experimental"],
+  "compatibility_flags": ["nodejs_compat"],
 
   // ANTHROPIC_API_KEY must be set as a secret:
   //   wrangler secret put ANTHROPIC_API_KEY --name code-change-agent
