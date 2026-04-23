@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "flarbor": "workspace:*",
+    "flarbor-reward": "workspace:*",
     "@cloudflare/think": "latest",
     "@cloudflare/shell": "latest",
     "@cloudflare/codemode": "latest",
