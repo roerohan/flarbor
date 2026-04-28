@@ -1,0 +1,16 @@
+[project]
+name = "code-change-agent-harbor"
+version = "0.0.1"
+description = "Harbor equivalent of Flarbor's code-change-agent — clone a repo, make LLM-driven changes, push to a new branch"
+requires-python = ">=3.12"
+dependencies = [
+    "harbor>=0.4.0",
+    "litellm>=1.80.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.backends"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/code_change_agent"]

@@ -1,0 +1,30 @@
+schema_version = "1.1"
+
+[task]
+name = "flarbor/code-change-agent-harbor"
+description = "Clone a repo, make LLM-driven code changes, push to a new branch. Harbor equivalent of Flarbor's code-change-agent."
+authors = [{ name = "Flarbor", email = "dev@flarbor.dev" }]
+keywords = ["code-change", "llm", "git", "comparison"]
+
+[metadata]
+difficulty_explanation = "Depends on the task instructions provided at runtime"
+category = "code-modification"
+flarbor_equivalent = "environments/code-change-agent"
+
+[verifier]
+timeout_sec = 30.0
+
+[agent]
+timeout_sec = 600.0
+
+[environment]
+build_timeout_sec = 300.0
+cpus = 2
+memory_mb = 4096
+storage_mb = 10240
+gpus = 0
+allow_internet = true
+# Runtime env vars — set these when running `harbor run`
+# REPO_URL, GITHUB_TOKEN, BRANCH, AUTHOR_NAME, AUTHOR_EMAIL, MAX_STEPS
+# are read by the agent from the host environment and passed through.
+env = { REPO_URL = "${REPO_URL}", GITHUB_TOKEN = "${GITHUB_TOKEN}", BRANCH = "${BRANCH}", AUTHOR_NAME = "${AUTHOR_NAME}", AUTHOR_EMAIL = "${AUTHOR_EMAIL}", MAX_STEPS = "${MAX_STEPS}" }
