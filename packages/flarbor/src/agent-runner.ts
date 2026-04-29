@@ -21,7 +21,9 @@ export async function runTask(
 ): Promise<TrialResult> {
   const agentName = `${task.repoUrl}:${task.branch ?? "default"}`;
   const start = Date.now();
-  console.log(`[flarbor:runner] dispatch agent=${agentName} repo=${task.repoUrl} branch=${task.branch ?? "(auto)"}`);
+  console.log(
+    `[flarbor:runner] dispatch agent=${agentName} repo=${task.repoUrl} branch=${task.branch ?? "(auto)"}`,
+  );
 
   let response: Response;
 
@@ -38,7 +40,9 @@ export async function runTask(
     );
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error(`[flarbor:runner] dispatch failed agent=${agentName} duration=${Date.now() - start}ms error=${message}`);
+    console.error(
+      `[flarbor:runner] dispatch failed agent=${agentName} duration=${Date.now() - start}ms error=${message}`,
+    );
     return {
       success: false,
       branch: task.branch ?? "",
@@ -48,22 +52,26 @@ export async function runTask(
     };
   }
 
-  console.log(`[flarbor:runner] agent responded agent=${agentName} status=${response.status} duration=${Date.now() - start}ms`);
+  console.log(
+    `[flarbor:runner] agent responded agent=${agentName} status=${response.status} duration=${Date.now() - start}ms`,
+  );
 
   try {
     const parsed: unknown = await response.json();
     if (isTrialResult(parsed)) {
       console.log(
         `[flarbor:runner] result agent=${agentName}` +
-        ` success=${parsed.success}` +
-        ` branch=${parsed.branch}` +
-        ` files_changed=${parsed.filesChanged.length}` +
-        ` duration=${Date.now() - start}ms` +
-        (parsed.error ? ` error=${parsed.error}` : ""),
+          ` success=${parsed.success}` +
+          ` branch=${parsed.branch}` +
+          ` files_changed=${parsed.filesChanged.length}` +
+          ` duration=${Date.now() - start}ms` +
+          (parsed.error ? ` error=${parsed.error}` : ""),
       );
       return parsed;
     }
-    console.error(`[flarbor:runner] invalid response shape agent=${agentName} status=${response.status}`);
+    console.error(
+      `[flarbor:runner] invalid response shape agent=${agentName} status=${response.status}`,
+    );
     return {
       success: false,
       branch: task.branch ?? "",
@@ -73,7 +81,9 @@ export async function runTask(
     };
   } catch {
     const text = await response.text().catch(() => "(unreadable)");
-    console.error(`[flarbor:runner] response parse failed agent=${agentName} status=${response.status} body=${text.slice(0, 200)}`);
+    console.error(
+      `[flarbor:runner] response parse failed agent=${agentName} status=${response.status} body=${text.slice(0, 200)}`,
+    );
     return {
       success: false,
       branch: task.branch ?? "",

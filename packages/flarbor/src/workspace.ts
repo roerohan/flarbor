@@ -34,7 +34,9 @@ export class GitWorkspace {
       await this.git.checkout({ ref: "HEAD" });
       console.log(`[flarbor:git] clone complete duration=${Date.now() - start}ms`);
     } catch (err) {
-      console.error(`[flarbor:git] clone failed duration=${Date.now() - start}ms error=${err instanceof Error ? err.message : String(err)}`);
+      console.error(
+        `[flarbor:git] clone failed duration=${Date.now() - start}ms error=${err instanceof Error ? err.message : String(err)}`,
+      );
       throw err;
     }
   }
@@ -65,7 +67,9 @@ export class GitWorkspace {
       message: opts.message,
       author: { name: config.authorName, email: config.authorEmail },
     });
-    console.log(`[flarbor:git] commit sha=${result.oid} branch=${opts.branch} author=${config.authorName}`);
+    console.log(
+      `[flarbor:git] commit sha=${result.oid} branch=${opts.branch} author=${config.authorName}`,
+    );
 
     if (opts.token) {
       const pushStart = Date.now();
@@ -74,14 +78,18 @@ export class GitWorkspace {
         await this.git.push({ token: opts.token });
         console.log(`[flarbor:git] push complete duration=${Date.now() - pushStart}ms`);
       } catch (err) {
-        console.error(`[flarbor:git] push failed duration=${Date.now() - pushStart}ms error=${err instanceof Error ? err.message : String(err)}`);
+        console.error(
+          `[flarbor:git] push failed duration=${Date.now() - pushStart}ms error=${err instanceof Error ? err.message : String(err)}`,
+        );
         throw err;
       }
     } else {
       console.warn("[flarbor:git] push skipped, no token provided");
     }
 
-    console.log(`[flarbor:git] commit_and_push complete duration=${Date.now() - start}ms sha=${result.oid}`);
+    console.log(
+      `[flarbor:git] commit_and_push complete duration=${Date.now() - start}ms sha=${result.oid}`,
+    );
     return result.oid;
   }
 
@@ -90,7 +98,9 @@ export class GitWorkspace {
     const changed = entries
       .filter((entry) => entry.status !== "unmodified")
       .map((entry) => entry.filepath);
-    console.log(`[flarbor:git] status changed_files=${changed.length} files=[${changed.join(",")}]`);
+    console.log(
+      `[flarbor:git] status changed_files=${changed.length} files=[${changed.join(",")}]`,
+    );
     return changed;
   }
 }

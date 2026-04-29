@@ -13,25 +13,11 @@ export {
   diffRatio,
 } from "./criteria/file.js";
 
-export {
-  hasChanges,
-  diffSize,
-  diffTouchesOnly,
-  noDeletions,
-} from "./criteria/diff.js";
+export { hasChanges, diffSize, diffTouchesOnly, noDeletions } from "./criteria/diff.js";
 
-export {
-  tokenBudget,
-  tokenEfficiency,
-  trialSuccess,
-} from "./criteria/token.js";
+export { tokenBudget, tokenEfficiency, trialSuccess } from "./criteria/token.js";
 
-export {
-  stepBudget,
-  touchedFile,
-  didNotTouch,
-  minFilesChanged,
-} from "./criteria/trajectory.js";
+export { stepBudget, touchedFile, didNotTouch, minFilesChanged } from "./criteria/trajectory.js";
 
 export type {
   WorkspaceLike,

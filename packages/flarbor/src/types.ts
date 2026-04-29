@@ -37,12 +37,7 @@ export interface RewardResult {
   errors: number;
 }
 
-export type AggregationStrategy =
-  | "weighted_mean"
-  | "all_pass"
-  | "any_pass"
-  | "min"
-  | "max";
+export type AggregationStrategy = "weighted_mean" | "all_pass" | "any_pass" | "min" | "max";
 
 export interface RewardScore {
   name: string;

@@ -26,9 +26,7 @@ import type { TokenUsage, EnvironmentConfig, FlarborEnv } from "./types.js";
  * **Workaround**: Pre-creates Workspace with `ctx.id` instead of `this.name` to
  * avoid the Agent framework's known `.name` hydration race condition during `onStart()`.
  */
-export abstract class FlarborEnvironment<
-  Env extends FlarborEnv = FlarborEnv,
-> extends Think<Env> {
+export abstract class FlarborEnvironment<Env extends FlarborEnv = FlarborEnv> extends Think<Env> {
   abstract getEnvironmentConfig(): EnvironmentConfig;
 
   override workspace = new Workspace({
@@ -165,10 +163,10 @@ export abstract class FlarborEnvironment<
     const toolNames = toolCalls.map((tc: { toolName: string }) => tc.toolName);
     console.log(
       `[flarbor] step=${this._stepCount}/${this.maxSteps}` +
-      ` finish_reason=${ctx.finishReason}` +
-      ` tools=[${toolNames.join(",")}]` +
-      ` tokens_step={in=${usage?.inputTokens ?? 0},out=${usage?.outputTokens ?? 0}}` +
-      ` tokens_total={in=${this._tokenUsage.inputTokens},out=${this._tokenUsage.outputTokens}}`,
+        ` finish_reason=${ctx.finishReason}` +
+        ` tools=[${toolNames.join(",")}]` +
+        ` tokens_step={in=${usage?.inputTokens ?? 0},out=${usage?.outputTokens ?? 0}}` +
+        ` tokens_total={in=${this._tokenUsage.inputTokens},out=${this._tokenUsage.outputTokens}}`,
     );
   }
 
@@ -182,8 +180,8 @@ export abstract class FlarborEnvironment<
     } else {
       console.log(
         `[flarbor] chat_response status=${result.status}` +
-        ` steps=${this._stepCount}` +
-        ` tokens={in=${this._tokenUsage.inputTokens},out=${this._tokenUsage.outputTokens}}`,
+          ` steps=${this._stepCount}` +
+          ` tokens={in=${this._tokenUsage.inputTokens},out=${this._tokenUsage.outputTokens}}`,
       );
     }
     this._turnCompleted = true;

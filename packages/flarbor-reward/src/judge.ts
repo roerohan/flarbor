@@ -42,8 +42,7 @@ function parseJudgeResponse(response: string, config: JudgeConfig): number {
     case "binary": {
       if (text.startsWith("yes")) return 1.0;
       if (text.startsWith("no")) return 0.0;
-      if (text.includes("yes") || text.includes("correct") || text.includes("pass"))
-        return 1.0;
+      if (text.includes("yes") || text.includes("correct") || text.includes("pass")) return 1.0;
       return 0.0;
     }
     case "likert": {
@@ -67,10 +66,7 @@ function parseJudgeResponse(response: string, config: JudgeConfig): number {
  * Reads the specified files from the workspace, builds a prompt,
  * and parses the response into a 0.0-1.0 score.
  */
-export function judge(
-  config: JudgeConfig,
-  opts?: { name?: string; weight?: number },
-): Criterion {
+export function judge(config: JudgeConfig, opts?: { name?: string; weight?: number }): Criterion {
   return criterion({
     name: opts?.name ?? `judge:${config.type}`,
     description: config.prompt.slice(0, 80),
