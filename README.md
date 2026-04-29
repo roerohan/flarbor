@@ -14,7 +14,7 @@ The bottleneck is environment infrastructure. Harbor proved the concept with Doc
 
 Flarbor runs that workflow on Cloudflare's execution ladder: Durable Objects for state, Workspaces for filesystems, Dynamic Workers for sandboxed code execution, and isomorphic-git for version control. No containers, no VMs, no cold starts. A thousand idle environments cost nothing.
 
-When you *do* need a real OS — for `npm test`, compilers, build toolchains — Flarbor spins up a container on demand via the Sandbox SDK. Containers as a last resort, not the default.
+When you _do_ need a real OS — for `npm test`, compilers, build toolchains — Flarbor spins up a container on demand via the Sandbox SDK. Containers as a last resort, not the default.
 
 ## Quick start
 
@@ -87,26 +87,26 @@ Side-by-side Flarbor and Harbor implementations of the same task: clone a repo, 
 
 ## Concept mapping
 
-| Harbor | Flarbor | Cloudflare primitive |
-|---|---|---|
-| `BaseEnvironment` (Docker container) | `FlarborEnvironment` (Durable Object) | [Durable Objects](https://developers.cloudflare.com/durable-objects/) + [`@cloudflare/shell`](https://www.npmjs.com/package/@cloudflare/shell) |
-| `BaseAgent` | Think subclass | [`@cloudflare/think`](https://developers.cloudflare.com/agents/api-reference/think/) |
-| Task (instruction + test) | `TaskConfig` via `POST /run` | Think chat turn |
-| Trial (one attempt) | `runTask()` -> `TrialResult` | DO instance lifecycle |
-| Container filesystem | `GitWorkspace` (Workspace + isomorphic-git) | [`Workspace`](https://www.npmjs.com/package/@cloudflare/shell) |
-| `docker exec` | `@cloudflare/shell` state API | Dynamic Workers |
-| `git` CLI | `@cloudflare/shell/git` | Pure-JS git |
-| `npm test` / `npm build` | Sandbox SDK | [`@cloudflare/sandbox`](https://developers.cloudflare.com/sandbox/) |
+| Harbor                               | Flarbor                                     | Cloudflare primitive                                                                                                                           |
+| ------------------------------------ | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `BaseEnvironment` (Docker container) | `FlarborEnvironment` (Durable Object)       | [Durable Objects](https://developers.cloudflare.com/durable-objects/) + [`@cloudflare/shell`](https://www.npmjs.com/package/@cloudflare/shell) |
+| `BaseAgent`                          | Think subclass                              | [`@cloudflare/think`](https://developers.cloudflare.com/agents/api-reference/think/)                                                           |
+| Task (instruction + test)            | `TaskConfig` via `POST /run`                | Think chat turn                                                                                                                                |
+| Trial (one attempt)                  | `runTask()` -> `TrialResult`                | DO instance lifecycle                                                                                                                          |
+| Container filesystem                 | `GitWorkspace` (Workspace + isomorphic-git) | [`Workspace`](https://www.npmjs.com/package/@cloudflare/shell)                                                                                 |
+| `docker exec`                        | `@cloudflare/shell` state API               | Dynamic Workers                                                                                                                                |
+| `git` CLI                            | `@cloudflare/shell/git`                     | Pure-JS git                                                                                                                                    |
+| `npm test` / `npm build`             | Sandbox SDK                                 | [`@cloudflare/sandbox`](https://developers.cloudflare.com/sandbox/)                                                                            |
 
 ## Execution ladder
 
-| Tier | What | Container? |
-|---|---|---|
-| 0: Workspace | Durable virtual filesystem (SQLite + R2) | No |
-| 1: Dynamic Worker | Sandboxed V8 isolate, no network | No |
-| 2: Dynamic Worker + npm | Isolate with bundled packages | No |
-| 3: Browser | Headless Chrome via Browser Run | No |
-| 4: Sandbox | Full Linux container | Yes |
+| Tier                    | What                                     | Container? |
+| ----------------------- | ---------------------------------------- | ---------- |
+| 0: Workspace            | Durable virtual filesystem (SQLite + R2) | No         |
+| 1: Dynamic Worker       | Sandboxed V8 isolate, no network         | No         |
+| 2: Dynamic Worker + npm | Isolate with bundled packages            | No         |
+| 3: Browser              | Headless Chrome via Browser Run          | No         |
+| 4: Sandbox              | Full Linux container                     | Yes        |
 
 Tiers 0-2 handle the core workflow. Tier 4 is only for build/test.
 
@@ -137,24 +137,26 @@ time ./run.sh
 Both use the same model (`claude-opus-4-6` via Anthropic API directly), so LLM costs are identical.
 
 **Flarbor (Cloudflare)**:
+
 - DO compute: $12.50/M requests + $0.10/GB-s wall-clock
 - DO storage: $0.20/M reads, $1.00/M writes, $0.75/GB stored
 - Idle cost: **$0** (DOs hibernate)
 
 **Harbor (Docker)**:
+
 - Local Docker: free (your machine)
 - Cloud sandboxes: per-second billing (Daytona, Modal, E2B)
 - Idle cost: $0 locally, per-second on cloud
 
 ### What to measure
 
-| Metric | How |
-|---|---|
-| Wall-clock latency | `time curl` / `time ./run.sh` |
-| Token usage | `usage` field in result JSON |
-| Cold start | First request after deploy (Flarbor ~50-200ms; Harbor 10-60s) |
-| Files changed | `filesChanged` in result |
-| Success rate | Run N trials, compare `success` rate |
+| Metric             | How                                                           |
+| ------------------ | ------------------------------------------------------------- |
+| Wall-clock latency | `time curl` / `time ./run.sh`                                 |
+| Token usage        | `usage` field in result JSON                                  |
+| Cold start         | First request after deploy (Flarbor ~50-200ms; Harbor 10-60s) |
+| Files changed      | `filesChanged` in result                                      |
+| Success rate       | Run N trials, compare `success` rate                          |
 
 Run 3-5 trials per side with the same repo and instruction. LLM output is non-deterministic.
 

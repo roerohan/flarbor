@@ -44,6 +44,7 @@ flarbor/
 ### FlarborEnvironment (`packages/flarbor/src/environment.ts`)
 
 Abstract base class extending `@cloudflare/think`. Handles:
+
 - Model/prompt/tools wiring via `getEnvironmentConfig()`
 - Code execution tool (Dynamic Workers) if LOADER binding is present
 - `beforeToolCall`: blocks writes to protected paths (glob matching)
@@ -81,11 +82,11 @@ Composable scoring. `criterion()` wraps an evaluate function. `reward()` groups 
 
 ## Dependencies
 
-| Package | Purpose |
-|---|---|
-| `@cloudflare/think` | Agent harness (agentic loop, persistence, workspace tools) |
-| `@cloudflare/shell` | Workspace filesystem + git |
-| `@cloudflare/codemode` | Dynamic Worker code execution |
-| `agents` | Agent class, routing |
-| `ai` | Vercel AI SDK (model interface) |
-| `zod` | Input validation (in environments) |
+| Package                | Purpose                                                    |
+| ---------------------- | ---------------------------------------------------------- |
+| `@cloudflare/think`    | Agent harness (agentic loop, persistence, workspace tools) |
+| `@cloudflare/shell`    | Workspace filesystem + git                                 |
+| `@cloudflare/codemode` | Dynamic Worker code execution                              |
+| `agents`               | Agent class, routing                                       |
+| `ai`                   | Vercel AI SDK (model interface)                            |
+| `zod`                  | Input validation (in environments)                         |

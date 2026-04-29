@@ -22,25 +22,25 @@
     "bindings": [
       {
         "class_name": "FlarborAgent",
-        "name": "FLARBOR_AGENT"
-      }
-    ]
+        "name": "FLARBOR_AGENT",
+      },
+    ],
   },
 
   "migrations": [
     {
       "tag": "v1",
-      "new_sqlite_classes": ["FlarborAgent"]
-    }
+      "new_sqlite_classes": ["FlarborAgent"],
+    },
   ],
 
   "worker_loaders": [
     {
-      "binding": "LOADER"
-    }
+      "binding": "LOADER",
+    },
   ],
 
   "observability": {
-    "enabled": true
-  }
+    "enabled": true,
+  },
 }

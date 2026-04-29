@@ -23,10 +23,7 @@ export function reward(opts: RewardOptions): Reward {
   };
 }
 
-async function evaluateCriterion(
-  c: Criterion,
-  ctx: CriterionContext,
-): Promise<CriterionResult> {
+async function evaluateCriterion(c: Criterion, ctx: CriterionContext): Promise<CriterionResult> {
   try {
     const raw = await c.evaluate(ctx);
     const score = typeof raw === "boolean" ? (raw ? 1.0 : 0.0) : raw;

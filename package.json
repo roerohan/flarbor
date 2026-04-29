@@ -7,11 +7,11 @@
   "bugs": {
     "url": "https://github.com/roerohan/flarbor/issues"
   },
+  "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/roerohan/flarbor.git"
   },
-  "license": "Apache-2.0",
   "workspaces": [
     "packages/*",
     "environments/**"

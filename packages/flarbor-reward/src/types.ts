@@ -44,12 +44,7 @@ export interface CriterionResult {
   error?: string;
 }
 
-export type AggregationStrategy =
-  | "weighted_mean"
-  | "all_pass"
-  | "any_pass"
-  | "min"
-  | "max";
+export type AggregationStrategy = "weighted_mean" | "all_pass" | "any_pass" | "min" | "max";
 
 export interface Reward {
   name: string;

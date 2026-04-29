@@ -12,8 +12,7 @@ export async function run(rewards: Reward[], ctx: CriterionContext): Promise<Rew
 
   const rewardScores = await Promise.all(rewards.map((r) => evaluateReward(r, ctx)));
 
-  const overallScore =
-    rewardScores.reduce((sum, r) => sum + r.score, 0) / rewardScores.length;
+  const overallScore = rewardScores.reduce((sum, r) => sum + r.score, 0) / rewardScores.length;
 
   let totalCriteria = 0;
   let errors = 0;
