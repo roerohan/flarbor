@@ -52,6 +52,7 @@ You can also set defaults via wrangler env vars (`REPO_URL`, `INSTRUCTION`, `BRA
 flarbor/
 ├── packages/
 │   ├── flarbor/              Core library (FlarborEnvironment, GitWorkspace, runTask)
+│   ├── flarbor-container/    Sandbox-backed container offload for build/test commands
 │   └── flarbor-reward/       Reward/scoring kit for evaluating agent outputs
 └── environments/
     └── code-change/
@@ -80,6 +81,12 @@ const result = await run(
   { workspace, filesChanged, success: true, usage },
 );
 ```
+
+### `packages/flarbor-container`
+
+Core library for offloading heavyweight build/test commands from a Durable Object agent loop to Cloudflare Sandbox/Containers. It exports a `ContainerRunner`, workspace sync helpers, command allowlist validation, and an AI SDK-compatible `createContainerCommandTool()`.
+
+The package is intentionally not a deployable Worker. Environments provide the Sandbox binding, container image, command policy, and prompt wiring.
 
 ### `environments/code-change/`
 
@@ -164,9 +171,9 @@ Run 3-5 trials per side with the same repo and instruction. LLM output is non-de
 
 - [x] Core library (`FlarborEnvironment`, `GitWorkspace`, task runner)
 - [x] Reward/scoring kit (`flarbor-reward`)
+- [x] `flarbor-container` — Sandbox SDK integration for build/test offload
 - [x] Code-change environment with Harbor comparison
 - [ ] End-to-end validation on deployed Workers
-- [ ] `flarbor-sandbox` — Sandbox SDK integration for build/test
 - [ ] Eval runner environment (run task datasets, collect results)
 - [ ] Job orchestration via DO sub-agents (Facets)
 - [ ] Task/dataset registry
