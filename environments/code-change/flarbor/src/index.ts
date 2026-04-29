@@ -112,14 +112,23 @@ export class FlarborAgent extends FlarborEnvironment<Env> {
   }
 
   async handleTask(task: TaskConfig): Promise<TrialResult> {
+    const taskStart = Date.now();
     this.resetTaskState();
     this.maxSteps = task.maxSteps ?? 30;
 
     const branch = task.branch ?? `flarbor/${Date.now().toString(36)}`;
     const token = this.env.GITHUB_TOKEN;
 
+    console.log(
+      `[code-change] task_start repo=${task.repoUrl} branch=${branch}` +
+      ` max_steps=${this.maxSteps} instructions="${task.instructions.slice(0, 80)}"`,
+    );
+
     await this.gitWorkspace.clone(task.repoUrl, token);
     await this.gitWorkspace.createBranch(branch);
+
+    console.log(`[code-change] inference_start branch=${branch}`);
+    const inferenceStart = Date.now();
 
     const saveResult = await this.saveMessages([
       {
@@ -128,6 +137,8 @@ export class FlarborAgent extends FlarborEnvironment<Env> {
         parts: [{ type: "text" as const, text: task.instructions }],
       },
     ]);
+
+    console.log(`[code-change] inference_done status=${saveResult.status} duration=${Date.now() - inferenceStart}ms`);
 
     if (saveResult.status === "skipped") {
       return this.buildFailResult(branch, "Inference turn was skipped (concurrent request collision)");
@@ -161,10 +172,23 @@ export class FlarborAgent extends FlarborEnvironment<Env> {
       maxSteps: this.maxSteps,
     });
 
+    console.log(
+      `[code-change] task_complete success=true branch=${branch} sha=${commitSha}` +
+      ` files_changed=${filesChanged.length} reward=${rewardResult.score.toFixed(3)}` +
+      ` tokens={in=${this.tokenUsage.inputTokens},out=${this.tokenUsage.outputTokens}}` +
+      ` duration=${Date.now() - taskStart}ms`,
+    );
+
     return { success: true, branch, commitSha, filesChanged, usage: this.tokenUsage, reward: rewardResult };
   }
 
   private async buildFailResult(branch: string, error: string): Promise<TrialResult> {
+    console.error(
+      `[code-change] task_failed branch=${branch}` +
+      ` tokens={in=${this.tokenUsage.inputTokens},out=${this.tokenUsage.outputTokens}}` +
+      ` error=${error}`,
+    );
+
     const rewardResult = await this.scoreTrial({
       workspace: this.workspace,
       filesChanged: [],
@@ -195,13 +219,14 @@ export class FlarborAgent extends FlarborEnvironment<Env> {
         return Response.json(result, { status: result.success ? 200 : 500 });
       } catch (err: unknown) {
         if (err instanceof z.ZodError) {
+          console.error(`[code-change] validation_error issues=${JSON.stringify(err.issues)}`);
           return Response.json(
             { success: false, error: "Invalid task config", details: err.issues },
             { status: 400 },
           );
         }
         const message = err instanceof Error ? err.message : String(err);
-        console.error("[code-change] handleTask error:", message);
+        console.error(`[code-change] unhandled_error error=${message}`);
         const result = await this.buildFailResult("", message);
         return Response.json(result, { status: 500 });
       }
@@ -214,13 +239,17 @@ export class FlarborAgent extends FlarborEnvironment<Env> {
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
+    const start = Date.now();
 
     if (url.pathname === "/run" && request.method === "POST") {
+      console.log(`[code-change:worker] incoming POST /run`);
+
       let task: TaskConfig;
       try {
         task = resolveTaskConfig(await request.clone().json(), env);
       } catch (err: unknown) {
         if (err instanceof z.ZodError) {
+          console.error(`[code-change:worker] validation_error issues=${JSON.stringify(err.issues)}`);
           return Response.json(
             { success: false, error: "Invalid task config", details: err.issues },
             { status: 400 },
@@ -229,9 +258,15 @@ export default {
         throw err;
       }
 
+      console.log(`[code-change:worker] dispatching repo=${task.repoUrl} branch=${task.branch ?? "(auto)"}`);
       const name = `${task.repoUrl}:${task.branch ?? "default"}`;
       const stub = env.FLARBOR_AGENT.getByName(name);
       const result = await runTask(stub, task);
+      console.log(
+        `[code-change:worker] response success=${result.success}` +
+        ` duration=${Date.now() - start}ms` +
+        (result.error ? ` error=${result.error}` : ""),
+      );
       return Response.json(result, { status: result.success ? 200 : 500 });
     }
 

@@ -38,5 +38,9 @@
     {
       "binding": "LOADER"
     }
-  ]
+  ],
+
+  "observability": {
+    "enabled": true
+  }
 }

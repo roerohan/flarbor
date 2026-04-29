@@ -41,6 +41,7 @@ export abstract class FlarborEnvironment<
   private _tokenUsage: TokenUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
   private _turnError: string | null = null;
   private _turnCompleted = false;
+  private _stepCount = 0;
 
   protected get envConfig(): EnvironmentConfig {
     this._config ??= this.getEnvironmentConfig();
@@ -68,6 +69,7 @@ export abstract class FlarborEnvironment<
     this._tokenUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
     this._turnError = null;
     this._turnCompleted = false;
+    this._stepCount = 0;
   }
 
   override chatRecovery = true;
@@ -130,6 +132,7 @@ export abstract class FlarborEnvironment<
       ["write", "edit", "delete"].includes(ctx.toolName) &&
       matchesGlob(path, protectedPaths)
     ) {
+      console.warn(`[flarbor] Blocked ${ctx.toolName} on protected path: ${path}`);
       return {
         action: "block",
         reason: `Path "${path}" is protected and cannot be modified.`,
@@ -138,28 +141,50 @@ export abstract class FlarborEnvironment<
   }
 
   override afterToolCall(ctx: ToolCallResultContext): void {
-    if (!ctx.success) {
+    if (ctx.success) {
+      console.log(`[flarbor] tool=${ctx.toolName} duration=${ctx.durationMs}ms status=ok`);
+    } else {
       console.error(
-        `[flarbor] Tool "${ctx.toolName}" failed after ${ctx.durationMs}ms:`,
-        ctx.error,
+        `[flarbor] tool=${ctx.toolName} duration=${ctx.durationMs}ms status=error error=${
+          ctx.error instanceof Error ? ctx.error.message : String(ctx.error)
+        }`,
       );
     }
   }
 
   override onStepFinish(ctx: StepContext): void {
+    this._stepCount++;
     const usage = ctx.usage;
     if (usage) {
       this._tokenUsage.inputTokens += usage.inputTokens ?? 0;
       this._tokenUsage.outputTokens += usage.outputTokens ?? 0;
       this._tokenUsage.totalTokens += usage.totalTokens ?? 0;
     }
+
+    const toolCalls = ctx.toolCalls ?? [];
+    const toolNames = toolCalls.map((tc: { toolName: string }) => tc.toolName);
+    console.log(
+      `[flarbor] step=${this._stepCount}/${this.maxSteps}` +
+      ` finish_reason=${ctx.finishReason}` +
+      ` tools=[${toolNames.join(",")}]` +
+      ` tokens_step={in=${usage?.inputTokens ?? 0},out=${usage?.outputTokens ?? 0}}` +
+      ` tokens_total={in=${this._tokenUsage.inputTokens},out=${this._tokenUsage.outputTokens}}`,
+    );
   }
 
   override onChatResponse(result: ChatResponseResult): void {
     if (result.status === "error") {
       this._turnError = result.error ?? "Unknown error during inference";
+      console.error(`[flarbor] chat_response status=error error=${this._turnError}`);
     } else if (result.status === "aborted") {
       this._turnError = "Turn was aborted";
+      console.warn("[flarbor] chat_response status=aborted");
+    } else {
+      console.log(
+        `[flarbor] chat_response status=${result.status}` +
+        ` steps=${this._stepCount}` +
+        ` tokens={in=${this._tokenUsage.inputTokens},out=${this._tokenUsage.outputTokens}}`,
+      );
     }
     this._turnCompleted = true;
   }
@@ -167,7 +192,7 @@ export abstract class FlarborEnvironment<
   override onChatError(error: unknown): unknown {
     const message = error instanceof Error ? error.message : String(error);
     this._turnError = message;
-    console.error("[flarbor] Chat error:", message);
+    console.error(`[flarbor] chat_error error=${message}`);
     return error;
   }
 }
