@@ -2,19 +2,15 @@ import { criterion } from "../criterion.js";
 import type { Criterion, CriterionContext } from "../types.js";
 
 /**
- * Total tokens used are within a budget.
  * Returns 1.0 at or below budget, linearly decays to 0.0 at 2x budget.
  */
-export function tokenBudget(
-  maxTokens: number,
-  weight?: number,
-): Criterion {
+export function tokenBudget(maxTokens: number, weight?: number): Criterion {
   return criterion({
     name: `token_budget:${maxTokens}`,
     description: `Used at most ${maxTokens} total tokens`,
     weight,
     evaluate: (ctx: CriterionContext) => {
-      if (!ctx.usage) return 1.0; // No usage data = no penalty
+      if (!ctx.usage) return 1.0;
       const used = ctx.usage.totalTokens;
       if (used <= maxTokens) return 1.0;
       if (used >= maxTokens * 2) return 0.0;
@@ -23,11 +19,6 @@ export function tokenBudget(
   });
 }
 
-/**
- * Token efficiency: ratio of output tokens to total tokens.
- * Higher is better — means less prompt bloat relative to output.
- * Returns the raw ratio (0.0 - 1.0).
- */
 export function tokenEfficiency(weight?: number): Criterion {
   return criterion({
     name: "token_efficiency",
@@ -40,9 +31,6 @@ export function tokenEfficiency(weight?: number): Criterion {
   });
 }
 
-/**
- * The trial completed successfully (no errors).
- */
 export function trialSuccess(weight?: number): Criterion {
   return criterion({
     name: "trial_success",

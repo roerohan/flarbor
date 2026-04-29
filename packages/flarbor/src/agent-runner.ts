@@ -1,23 +1,19 @@
 import type { TaskConfig, TrialResult } from "./types.js";
 
+function isTrialResult(value: unknown): value is TrialResult {
+  if (value === null || typeof value !== "object") return false;
+  const v = value as Record<string, unknown>;
+  return (
+    typeof v.success === "boolean" &&
+    typeof v.branch === "string" &&
+    typeof v.commitSha === "string" &&
+    Array.isArray(v.filesChanged)
+  );
+}
+
 /**
- * Run a task against a Flarbor environment Durable Object.
- *
- * This is a convenience function for Worker fetch handlers that need
- * to dispatch tasks to a FlarborEnvironment DO instance. It handles
- * request construction, response parsing, and error wrapping.
- *
- * @example
- * ```typescript
- * export default {
- *   async fetch(request: Request, env: Env) {
- *     const task = await request.json() as TaskConfig;
- *     const stub = env.MY_AGENT.getByName(`${task.repoUrl}:${task.branch}`);
- *     const result = await runTask(stub, task);
- *     return Response.json(result);
- *   }
- * };
- * ```
+ * Dispatch a task to a FlarborEnvironment Durable Object stub.
+ * Handles request construction, response parsing, and error wrapping.
  */
 export async function runTask(
   stub: { fetch: (request: Request) => Promise<Response> },
@@ -26,9 +22,6 @@ export async function runTask(
   let response: Response;
 
   try {
-    // Derive a stable name for the DO from the task config.
-    // Sent via x-partykit-room header so the Agent/PartyServer framework
-    // can hydrate this.name before onStart accesses it.
     const agentName = `${task.repoUrl}:${task.branch ?? "default"}`;
     response = await stub.fetch(
       new Request("http://internal/run", {
@@ -52,7 +45,15 @@ export async function runTask(
   }
 
   try {
-    return (await response.json()) as TrialResult;
+    const parsed: unknown = await response.json();
+    if (isTrialResult(parsed)) return parsed;
+    return {
+      success: false,
+      branch: task.branch ?? "",
+      commitSha: "",
+      filesChanged: [],
+      error: `Agent returned invalid TrialResult (status ${response.status})`,
+    };
   } catch {
     const text = await response.text().catch(() => "(unreadable)");
     return {

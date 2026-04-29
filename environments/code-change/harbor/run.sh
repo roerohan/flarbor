@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Run the Harbor code-change-agent for latency/cost comparison with Flarbor.
+# Run the Harbor code-change environment for latency/cost comparison with Flarbor.
 #
 # Usage:
 #   export REPO_URL="https://github.com/org/repo"

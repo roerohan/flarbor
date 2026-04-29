@@ -1,14 +1,23 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "code-change-agent",
+  "name": "code-change-flarbor",
   "main": "src/index.ts",
   "compatibility_date": "2026-04-22",
   "compatibility_flags": ["nodejs_compat"],
 
-  // ANTHROPIC_API_KEY must be set as a secret:
-  //   wrangler secret put ANTHROPIC_API_KEY --name code-change-agent
+  // Secrets (set via `wrangler secret put`):
+  //   ANTHROPIC_API_KEY, GITHUB_TOKEN
 
-  // Durable Object: the FlarborAgent
+  // Default env vars — override per-request via POST body
+  "vars": {
+    // "REPO_URL": "https://github.com/org/repo",
+    // "INSTRUCTION": "Add error handling to fetch calls in src/api.ts",
+    // "BRANCH": "flarbor/my-change",
+    // "AUTHOR_NAME": "Flarbor Agent",
+    // "AUTHOR_EMAIL": "agent@flarbor.dev",
+    // "MAX_STEPS": "30"
+  },
+
   "durable_objects": {
     "bindings": [
       {
@@ -18,7 +27,6 @@
     ]
   },
 
-  // SQLite-backed storage for the Durable Object
   "migrations": [
     {
       "tag": "v1",
@@ -26,7 +34,6 @@
     }
   ],
 
-  // Dynamic Worker loader for sandboxed code execution
   "worker_loaders": [
     {
       "binding": "LOADER"

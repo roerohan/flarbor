@@ -7,11 +7,6 @@ const DEFAULT_GIT_CONFIG: GitConfig = {
   authorEmail: "agent@flarbor.dev",
 };
 
-/**
- * GitWorkspace wraps a Workspace and a Git handle together.
- * The Git handle is created once and reused across all operations,
- * avoiding repeated construction of WorkspaceFileSystem + createGit.
- */
 export class GitWorkspace {
   readonly workspace: Workspace;
   readonly git: Git;
@@ -23,11 +18,8 @@ export class GitWorkspace {
   }
 
   /**
-   * Clone a repository into the workspace.
-   *
-   * Uses noCheckout + separate checkout to avoid a known isomorphic-git
-   * issue where lstat returns null for freshly-written files during
-   * checkout on virtual filesystems, causing TypeError noise in console.
+   * Uses noCheckout + separate checkout to work around an isomorphic-git issue
+   * where lstat returns null for freshly-written files on virtual filesystems.
    */
   async clone(repoUrl: string, token?: string): Promise<void> {
     await this.git.clone({
@@ -39,26 +31,16 @@ export class GitWorkspace {
     await this.git.checkout({ ref: "HEAD" });
   }
 
-  /**
-   * Create a new branch and check it out.
-   * If the branch already exists, just checks it out.
-   */
   async createBranch(branch: string): Promise<void> {
     try {
       await this.git.branch({ name: branch });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      if (!message.includes("already exists")) {
-        throw err;
-      }
+      if (!message.includes("already exists")) throw err;
     }
     await this.git.checkout({ ref: branch });
   }
 
-  /**
-   * Stage all changes, commit, and optionally push.
-   * Returns the commit SHA.
-   */
   async commitAndPush(opts: {
     branch: string;
     message: string;
@@ -68,13 +50,9 @@ export class GitWorkspace {
     const config = opts.gitConfig ?? DEFAULT_GIT_CONFIG;
 
     await this.git.add({ filepath: "." });
-
     const result = await this.git.commit({
       message: opts.message,
-      author: {
-        name: config.authorName,
-        email: config.authorEmail,
-      },
+      author: { name: config.authorName, email: config.authorEmail },
     });
 
     if (opts.token) {
@@ -84,9 +62,6 @@ export class GitWorkspace {
     return result.oid;
   }
 
-  /**
-   * Get the list of files that differ from HEAD.
-   */
   async getChangedFiles(): Promise<string[]> {
     const entries = await this.git.status();
     return entries
