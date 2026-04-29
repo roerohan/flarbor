@@ -8,14 +8,13 @@
   "exports": {
     ".": "./src/index.ts"
   },
-  "license": "ISC",
+  "license": "Apache-2.0",
   "dependencies": {
     "@cloudflare/codemode": "latest",
     "@cloudflare/shell": "latest",
     "@cloudflare/think": "latest",
     "agents": "latest",
-    "ai": "latest",
-    "zod": "latest"
+    "ai": "latest"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "latest",

@@ -11,16 +11,16 @@
     "type": "git",
     "url": "git+https://github.com/roerohan/flarbor.git"
   },
-  "license": "ISC",
+  "license": "Apache-2.0",
   "workspaces": [
     "packages/*",
-    "environments/*"
+    "environments/**"
   ],
   "scripts": {
-    "dev": "pnpm --filter code-change-agent run dev",
-    "deploy": "pnpm --filter code-change-agent run deploy"
+    "dev": "pnpm --filter code-change-flarbor run dev",
+    "deploy": "pnpm --filter code-change-flarbor run deploy"
   },
-  "dependencies": {
+  "devDependencies": {
     "wrangler": "^4.84.1"
   }
 }

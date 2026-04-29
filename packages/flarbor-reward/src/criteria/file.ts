@@ -1,9 +1,6 @@
 import { criterion } from "../criterion.js";
 import type { Criterion, CriterionContext } from "../types.js";
 
-/**
- * File exists in the workspace.
- */
 export function fileExists(path: string, weight?: number): Criterion {
   return criterion({
     name: `file_exists:${path}`,
@@ -16,9 +13,6 @@ export function fileExists(path: string, weight?: number): Criterion {
   });
 }
 
-/**
- * File does not exist in the workspace.
- */
 export function fileNotExists(path: string, weight?: number): Criterion {
   return criterion({
     name: `file_not_exists:${path}`,
@@ -31,14 +25,7 @@ export function fileNotExists(path: string, weight?: number): Criterion {
   });
 }
 
-/**
- * File contains a substring.
- */
-export function fileContains(
-  path: string,
-  text: string,
-  weight?: number,
-): Criterion {
+export function fileContains(path: string, text: string, weight?: number): Criterion {
   return criterion({
     name: `file_contains:${path}`,
     description: `File "${path}" contains "${text.slice(0, 40)}"`,
@@ -51,9 +38,6 @@ export function fileContains(
   });
 }
 
-/**
- * File content matches a regex pattern.
- */
 export function fileContainsRegex(
   path: string,
   pattern: string | RegExp,
@@ -72,14 +56,7 @@ export function fileContainsRegex(
   });
 }
 
-/**
- * File content exactly equals expected text (whitespace-stripped).
- */
-export function fileMatches(
-  path: string,
-  expected: string,
-  weight?: number,
-): Criterion {
+export function fileMatches(path: string, expected: string, weight?: number): Criterion {
   return criterion({
     name: `file_matches:${path}`,
     description: `File "${path}" matches expected content`,
@@ -92,14 +69,7 @@ export function fileMatches(
   });
 }
 
-/**
- * Two files have identical content.
- */
-export function filesEqual(
-  path1: string,
-  path2: string,
-  weight?: number,
-): Criterion {
+export function filesEqual(path1: string, path2: string, weight?: number): Criterion {
   return criterion({
     name: `files_equal:${path1}:${path2}`,
     description: `Files "${path1}" and "${path2}" are identical`,
@@ -116,14 +86,9 @@ export function filesEqual(
 }
 
 /**
- * Similarity ratio between file content and expected text.
- * Returns 0.0 - 1.0 based on Levenshtein-like character overlap.
+ * Similarity between file content and expected text (Sorensen-Dice on bigrams).
  */
-export function diffRatio(
-  path: string,
-  expected: string,
-  weight?: number,
-): Criterion {
+export function diffRatio(path: string, expected: string, weight?: number): Criterion {
   return criterion({
     name: `diff_ratio:${path}`,
     description: `Similarity of "${path}" to expected content`,
@@ -136,7 +101,6 @@ export function diffRatio(
       if (actual === exp) return 1.0;
       if (actual.length === 0 && exp.length === 0) return 1.0;
 
-      // Simple character-level similarity (Sørensen–Dice coefficient on bigrams)
       const bigrams = (s: string): Set<string> => {
         const set = new Set<string>();
         for (let i = 0; i < s.length - 1; i++) {
@@ -150,7 +114,9 @@ export function diffRatio(
       for (const bg of a) {
         if (b.has(bg)) intersection++;
       }
-      return (2 * intersection) / (a.size + b.size);
+      const denominator = a.size + b.size;
+      if (denominator === 0) return 0;
+      return (2 * intersection) / denominator;
     },
   });
 }

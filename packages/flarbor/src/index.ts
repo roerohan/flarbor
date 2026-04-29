@@ -1,17 +1,16 @@
-// Core environment base class
 export { FlarborEnvironment } from "./environment.js";
-
-// Git workspace management
 export { GitWorkspace } from "./workspace.js";
-
-// Task runner utility
 export { runTask } from "./agent-runner.js";
+export { globToRegex, matchesGlob } from "./glob.js";
 
-// Types
 export type {
   TaskConfig,
   TrialResult,
   TokenUsage,
+  RewardResult,
+  RewardScore,
+  CriterionResult,
+  AggregationStrategy,
   GitConfig,
   EnvironmentConfig,
   FlarborEnv,
