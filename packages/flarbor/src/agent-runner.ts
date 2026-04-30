@@ -56,8 +56,10 @@ export async function runTask(
     `[flarbor:runner] agent responded agent=${agentName} status=${response.status} duration=${Date.now() - start}ms`,
   );
 
+  const text = await response.text().catch(() => "(unreadable)");
+
   try {
-    const parsed: unknown = await response.json();
+    const parsed: unknown = JSON.parse(text);
     if (isTrialResult(parsed)) {
       console.log(
         `[flarbor:runner] result agent=${agentName}` +
@@ -80,7 +82,6 @@ export async function runTask(
       error: `Agent returned invalid TrialResult (status ${response.status})`,
     };
   } catch {
-    const text = await response.text().catch(() => "(unreadable)");
     console.error(
       `[flarbor:runner] response parse failed agent=${agentName} status=${response.status} body=${text.slice(0, 200)}`,
     );
