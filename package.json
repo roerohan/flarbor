@@ -19,10 +19,13 @@
   "scripts": {
     "dev": "pnpm --filter code-change-flarbor run dev",
     "deploy": "pnpm --filter code-change-flarbor run deploy",
+    "test": "vitest run packages",
+    "test:watch": "vitest packages",
     "format": "oxfmt ."
   },
   "devDependencies": {
     "oxfmt": "^0.47.0",
+    "vitest": "^4.1.5",
     "wrangler": "^4.84.1"
   }
 }

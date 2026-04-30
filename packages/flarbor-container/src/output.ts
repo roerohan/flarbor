@@ -19,10 +19,24 @@ export function truncateText(text: string, maxBytes: number): TruncatedText {
   }
 
   const budget = Math.max(0, maxBytes - markerBytes);
-  const sliced = bytes.slice(0, budget);
+  const sliced = sliceValidUtf8Prefix(bytes, budget);
 
   return {
-    text: new TextDecoder().decode(sliced) + marker,
+    text: sliced + marker,
     truncated: true,
   };
+}
+
+function sliceValidUtf8Prefix(bytes: Uint8Array, maxBytes: number): string {
+  const decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: false });
+
+  for (let end = maxBytes; end >= 0 && end >= maxBytes - 3; end--) {
+    try {
+      return decoder.decode(bytes.slice(0, end));
+    } catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+    }
+  }
+
+  return "";
 }
