@@ -44,12 +44,13 @@ export async function dispatchTask(stub: FetcherLike, task: TaskConfig): Promise
   try {
     const parsed: unknown = await response.json();
     if (isTrialResult(parsed)) return parsed;
+    const preview = JSON.stringify(parsed).slice(0, 500);
     return {
       success: false,
       branch: task.branch ?? "",
       commitSha: "",
       filesChanged: [],
-      error: `Agent returned invalid TrialResult (status ${response.status})`,
+      error: `Agent returned invalid TrialResult (status ${response.status}): ${preview}`,
     };
   } catch {
     const text = await response.text().catch(() => "(unreadable)");

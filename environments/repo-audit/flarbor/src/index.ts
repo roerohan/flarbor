@@ -133,6 +133,85 @@ function extractJson(text: string): unknown {
   }
 }
 
+function asRecord(value: unknown): Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function asString(value: unknown, fallback: string): string {
+  return typeof value === "string" && value.trim() ? value : fallback;
+}
+
+function scoreFrom(scores: Record<string, unknown>, keys: string[]): number {
+  for (const key of keys) {
+    const raw = scores[key];
+    if (typeof raw !== "number" || !Number.isFinite(raw)) continue;
+    const normalized = raw > 1 && raw <= 10 ? raw / 10 : raw;
+    return Math.max(0, Math.min(1, normalized));
+  }
+  return 0;
+}
+
+function severityFrom(value: unknown): "low" | "medium" | "high" {
+  if (value === "low" || value === "medium" || value === "high") return value;
+  return "medium";
+}
+
+function categoryFrom(value: unknown): Category {
+  if (
+    value === "documentation" ||
+    value === "testing" ||
+    value === "packaging" ||
+    value === "maintainability" ||
+    value === "deployment"
+  ) {
+    return value;
+  }
+  if (value === "deploymentReadiness" || value === "deployment_readiness") return "deployment";
+  return "maintainability";
+}
+
+function parseAuditReport(raw: unknown, task: TaskConfig, model: string): RepoAuditReport {
+  const report = asRecord(raw);
+  const scores = asRecord(report.scores);
+  const findings = Array.isArray(report.findings) ? report.findings : [];
+  const inspectedFiles = Array.isArray(report.inspectedFiles)
+    ? report.inspectedFiles.filter((file): file is string => typeof file === "string")
+    : [];
+
+  const normalized: RepoAuditReport = {
+    repoUrl: asString(report.repoUrl, task.repoUrl),
+    model: asString(report.model, model),
+    summary: asString(report.summary, "Model returned an audit without a summary."),
+    scores: {
+      documentation: scoreFrom(scores, ["documentation", "docs"]),
+      testing: scoreFrom(scores, ["testing", "tests", "testCoverage"]),
+      packaging: scoreFrom(scores, ["packaging", "package", "build"]),
+      maintainability: scoreFrom(scores, ["maintainability", "maintenance"]),
+      deploymentReadiness: scoreFrom(scores, [
+        "deploymentReadiness",
+        "deployment_readiness",
+        "deployment",
+        "deploy",
+      ]),
+    },
+    findings: findings.map((finding, index) => {
+      const value = asRecord(finding);
+      return {
+        severity: severityFrom(value.severity),
+        category: categoryFrom(value.category),
+        title: asString(value.title, `Finding ${index + 1}`),
+        evidence: asString(value.evidence, "No specific evidence provided by the model."),
+        recommendation: asString(value.recommendation, "Review this area manually."),
+      };
+    }),
+    inspectedFiles,
+  };
+
+  return AuditReportSchema.parse(normalized);
+}
+
 function auditReward(report: RepoAuditReport): RewardResult {
   const criteria = [
     { name: "documentation", score: report.scores.documentation, weight: 1 },
@@ -253,17 +332,51 @@ export class RepoAuditAgent extends DurableObject<Env> {
       return new Response("Not found", { status: 404 });
     }
 
+    let task: TaskConfig;
     try {
-      const task = TaskConfigSchema.parse(await request.json());
-      const result = await this.runAudit(task);
-      return Response.json(result, { status: result.success ? 200 : 500 });
+      task = TaskConfigSchema.parse(await request.json());
     } catch (err: unknown) {
       if (err instanceof z.ZodError) return responseForZodError(err);
+      throw err;
+    }
+
+    const result = await this.runAuditSafely(task);
+    return Response.json(result, { status: result.success ? 200 : 500 });
+  }
+
+  private async runAuditSafely(task: TaskConfig): Promise<TrialResult> {
+    try {
+      return await this.runAudit(task);
+    } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      return Response.json(
-        { success: false, branch: "", commitSha: "", filesChanged: [], error: message },
-        { status: 500 },
-      );
+      console.error(`[repo-audit] failed repo=${task.repoUrl} error=${message}`);
+      return {
+        success: false,
+        branch: "",
+        commitSha: "",
+        filesChanged: [],
+        error: message,
+        reward: {
+          score: 0,
+          totalCriteria: 5,
+          errors: 1,
+          rewards: [
+            {
+              name: "repo_audit",
+              score: 0,
+              aggregation: "weighted_mean",
+              criteria: [
+                { name: "documentation", score: 0, weight: 1, error: message },
+                { name: "testing", score: 0, weight: 1, error: message },
+                { name: "packaging", score: 0, weight: 1, error: message },
+                { name: "maintainability", score: 0, weight: 1, error: message },
+                { name: "deployment_readiness", score: 0, weight: 1, error: message },
+              ],
+            },
+          ],
+        },
+        metadata: { auditError: message },
+      };
     }
   }
 
@@ -283,7 +396,7 @@ export class RepoAuditAgent extends DurableObject<Env> {
     const snapshot = await collectSnapshot(this.workspace);
     const prompt = buildPrompt(task, snapshot, modelName);
     const generated = await generateText({ model, prompt });
-    const report = AuditReportSchema.parse(extractJson(generated.text));
+    const report = parseAuditReport(extractJson(generated.text), task, modelName);
     const usage = {
       inputTokens: generated.usage?.inputTokens ?? 0,
       outputTokens: generated.usage?.outputTokens ?? 0,
@@ -339,7 +452,9 @@ export default {
 
       const result = await runJob(config, {
         resolveAgent: (_target, trial) =>
-          env.REPO_AUDIT_AGENT.getByName(`${trial.task.repoUrl}:${trial.id}:${crypto.randomUUID()}`),
+          env.REPO_AUDIT_AGENT.getByName(
+            `${trial.task.repoUrl}:${trial.id}:${crypto.randomUUID()}`,
+          ),
       });
       return Response.json(result, { status: result.status === "completed" ? 200 : 500 });
     }
