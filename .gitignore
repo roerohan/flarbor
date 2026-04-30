@@ -38,6 +38,10 @@ pnpm-debug.log*
 coverage/
 .nyc_output/
 
+# Python
+__pycache__/
+*.py[cod]
+
 # Lock files from wrong package manager
 package-lock.json
 yarn.lock
