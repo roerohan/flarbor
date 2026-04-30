@@ -18,6 +18,7 @@ export interface TrialResult {
   error?: string;
   usage?: TokenUsage;
   reward?: RewardResult;
+  metadata?: Record<string, unknown>;
 }
 
 export interface TokenUsage {

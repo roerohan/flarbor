@@ -1,0 +1,32 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "repo-audit-flarbor",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-04-22",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Copy .dev.vars.example to .dev.vars for local development.
+  "vars": {
+    "MODEL_NAME": "claude-opus-4-6",
+  },
+
+  "durable_objects": {
+    "bindings": [
+      {
+        "class_name": "RepoAuditAgent",
+        "name": "REPO_AUDIT_AGENT",
+      },
+    ],
+  },
+
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["RepoAuditAgent"],
+    },
+  ],
+
+  "observability": {
+    "enabled": true,
+  },
+}

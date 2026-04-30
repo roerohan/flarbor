@@ -1,0 +1,26 @@
+schema_version = "1.1"
+
+[task]
+name = "flarbor/repo-audit-harbor"
+description = "Audit a repository with a real LLM model without modifying it."
+authors = [{ name = "Flarbor", email = "dev@flarbor.dev" }]
+keywords = ["repo-audit", "llm", "git", "comparison"]
+
+[metadata]
+category = "repository-audit"
+flarbor_equivalent = "environments/repo-audit/flarbor"
+
+[agent]
+timeout_sec = 600.0
+
+[verifier]
+timeout_sec = 30.0
+
+[environment]
+build_timeout_sec = 300.0
+cpus = 2
+memory_mb = 4096
+storage_mb = 10240
+gpus = 0
+allow_internet = true
+env = { REPO_URL = "${REPO_URL}", MODEL_NAME = "${MODEL_NAME}", ANTHROPIC_API_KEY = "${ANTHROPIC_API_KEY}", OPENAI_API_KEY = "${OPENAI_API_KEY}" }
