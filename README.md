@@ -10,7 +10,7 @@ Flarbor is inspired by [Harbor](https://www.harborframework.com/docs), which sho
 
 ## Why
 
-I, [roerohan](https://x.com/roerohan), strongly believe that RL environments will be democratized. People will train and fine-tune models for their specific use cases by running task-specific RL loops with reward functions tailored to their domain.
+RL environments will soon be democratized. People will train and fine-tune models for their specific use cases by running task-specific RL loops with reward functions tailored to their domain.
 
 The bottleneck is environment infrastructure. Harbor proved the concept with Docker containers, but containers are heavy, slow to cold-start, and expensive at scale. The core agentic workflow - clone a repo, read files, make changes, push - doesn't need an OS. It needs a filesystem, git, and an LLM.
 
