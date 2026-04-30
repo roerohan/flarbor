@@ -1,16 +1,18 @@
 # Flarbor
 
-[Harbor](https://www.harborframework.com/docs) alternative built entirely on Cloudflare primitives.
+Flarbor is a toolchain for building, running, and benchmarking RL environments for AI agents and model-driven workflows.
 
-Where Harbor relies on Docker containers for durable execution and isolated environments, Flarbor replaces them with Durable Objects, Dynamic Workers, and the Cloudflare Agents SDK — achieving the same isolation and persistence model without containers for the core workflow.
+An RL environment is the loop around a model: it gives the model a task, exposes tools and state, records the model's actions, and scores the result with reward functions. For agentic software tasks, that environment often needs durable state, a filesystem, git, logs, evaluation code, and repeatable trials.
 
-Containers are only needed when running `npm build`, `npm test`, or other OS-level toolchains, and for that Flarbor defers to the [Sandbox SDK](https://developers.cloudflare.com/sandbox/).
+Flarbor is designed for input/output-heavy environments where most of the work is reading, writing, diffing, scoring, and coordinating state rather than running long-lived OS processes. It runs the core workflow on Cloudflare primitives: Durable Objects for state, Workspaces for filesystems, Dynamic Workers for sandboxed code execution, and the Cloudflare Agents SDK for the agent loop.
+
+Flarbor is inspired by [Harbor](https://www.harborframework.com/docs), which showed how useful isolated RL environments can be. Harbor runs each environment in a Docker container, which can be slow to spin up and expensive to run in large parallel batches. Flarbor explores the same environment model on Cloudflare primitives, using containers only when an environment needs `npm build`, `npm test`, compilers, or other OS-level toolchains via the [Sandbox SDK](https://developers.cloudflare.com/sandbox/).
 
 ## Why
 
-RL environments will be democratized. People will train their own bespoke models for their specific use case — not fine-tune a generic foundation model, but run task-specific RL loops with reward functions tailored to their domain.
+I, [roerohan](https://x.com/roerohan), strongly believe that RL environments will be democratized. People will train and fine-tune models for their specific use cases by running task-specific RL loops with reward functions tailored to their domain.
 
-The bottleneck is environment infrastructure. Harbor proved the concept with Docker containers, but containers are heavy, slow to cold-start, and expensive at scale. The core agentic workflow — clone a repo, read files, make changes, push — doesn't need an OS. It needs a filesystem, git, and an LLM.
+The bottleneck is environment infrastructure. Harbor proved the concept with Docker containers, but containers are heavy, slow to cold-start, and expensive at scale. The core agentic workflow - clone a repo, read files, make changes, push - doesn't need an OS. It needs a filesystem, git, and an LLM.
 
 Flarbor runs that workflow on Cloudflare's execution ladder: Durable Objects for state, Workspaces for filesystems, Dynamic Workers for sandboxed code execution, and isomorphic-git for version control. No containers, no VMs, no cold starts. A thousand idle environments cost nothing.
 
