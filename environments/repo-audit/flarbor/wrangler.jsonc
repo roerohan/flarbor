@@ -16,6 +16,10 @@
         "class_name": "RepoAuditAgent",
         "name": "REPO_AUDIT_AGENT",
       },
+      {
+        "class_name": "RepoAuditJob",
+        "name": "REPO_AUDIT_JOB",
+      },
     ],
   },
 
@@ -23,6 +27,10 @@
     {
       "tag": "v1",
       "new_sqlite_classes": ["RepoAuditAgent"],
+    },
+    {
+      "tag": "v2",
+      "new_sqlite_classes": ["RepoAuditJob"],
     },
   ],
 

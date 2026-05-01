@@ -27,7 +27,7 @@ curl -X POST http://localhost:8787/run \
   }'
 ```
 
-## Batch Audit With `flarbor-job`
+## In-Request Batch Audit With `flarbor-job`
 
 ```sh
 curl -X POST http://localhost:8787/jobs/run \
@@ -51,8 +51,39 @@ curl -X POST http://localhost:8787/jobs/run \
 
 The response is a `JobResult`. Each trial contains `metadata.audit` with the structured report.
 
+## Durable Job Audit
+
+`POST /jobs` runs the same batch through the `JobObject` Durable Object helper and persists job state after each trial. The job ID is either the submitted `id` or a stable ID derived from the config.
+
+```sh
+curl -X POST http://localhost:8787/jobs \
+  -H 'content-type: application/json' \
+  -d '{
+    "id": "audit-small-set",
+    "name": "Audit small repo set",
+    "attempts": 1,
+    "concurrency": 2,
+    "tasks": [
+      {
+        "id": "flarbor",
+        "task": {
+          "repoUrl": "https://github.com/roerohan/flarbor",
+          "instructions": "Audit docs, tests, packaging, maintainability, and deployment readiness."
+        }
+      }
+    ]
+  }'
+```
+
+Inspect or cancel persisted state:
+
+```sh
+curl http://localhost:8787/jobs/audit-small-set
+curl -X POST http://localhost:8787/jobs/audit-small-set/cancel
+```
+
 ## Notes
 
 - This is read-only. `branch`, `commitSha`, and `filesChanged` are empty in successful results.
 - The repo snapshot is bounded to keep model input size manageable.
-- This is an in-request batch runner. Durable background jobs will require a future Job Durable Object.
+- `/jobs/run` is an in-request batch runner. `/jobs` uses persisted Durable Object job state, but still runs the small batch inside the current RPC call. Larger background jobs will require a future Queue backend.
