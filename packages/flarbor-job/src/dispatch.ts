@@ -1,6 +1,20 @@
 import type { TaskConfig, TrialResult } from "flarbor";
 import type { FetcherLike } from "./types.js";
 
+export type DispatchErrorKind = "fetch_failed" | "invalid_result" | "invalid_json";
+
+export class DispatchError extends Error {
+  readonly kind: DispatchErrorKind;
+  readonly status?: number;
+
+  constructor(kind: DispatchErrorKind, message: string, status?: number) {
+    super(message);
+    this.name = "DispatchError";
+    this.kind = kind;
+    this.status = status;
+  }
+}
+
 function isTrialResult(value: unknown): value is TrialResult {
   if (value === null || typeof value !== "object") return false;
   const v = value as Record<string, unknown>;
@@ -32,34 +46,26 @@ export async function dispatchTask(stub: FetcherLike, task: TaskConfig): Promise
     );
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    return {
-      success: false,
-      branch: task.branch ?? "",
-      commitSha: "",
-      filesChanged: [],
-      error: `Failed to reach agent: ${message}`,
-    };
+    throw new DispatchError("fetch_failed", `Failed to reach agent: ${message}`);
   }
 
+  let parsed: unknown;
   try {
-    const parsed: unknown = await response.json();
-    if (isTrialResult(parsed)) return parsed;
-    const preview = JSON.stringify(parsed).slice(0, 500);
-    return {
-      success: false,
-      branch: task.branch ?? "",
-      commitSha: "",
-      filesChanged: [],
-      error: `Agent returned invalid TrialResult (status ${response.status}): ${preview}`,
-    };
+    parsed = await response.clone().json();
   } catch {
     const text = await response.text().catch(() => "(unreadable)");
-    return {
-      success: false,
-      branch: task.branch ?? "",
-      commitSha: "",
-      filesChanged: [],
-      error: `Agent returned ${response.status}: ${text}`,
-    };
+    throw new DispatchError(
+      "invalid_json",
+      `Agent returned ${response.status} with invalid JSON: ${text}`,
+      response.status,
+    );
   }
+
+  if (isTrialResult(parsed)) return parsed;
+  const preview = JSON.stringify(parsed).slice(0, 500);
+  throw new DispatchError(
+    "invalid_result",
+    `Agent returned invalid TrialResult (status ${response.status}): ${preview}`,
+    response.status,
+  );
 }

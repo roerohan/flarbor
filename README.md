@@ -55,6 +55,7 @@ flarbor/
 ├── packages/
 │   ├── flarbor/              Core library (FlarborEnvironment, GitWorkspace, runTask)
 │   ├── flarbor-container/    Sandbox-backed container offload for build/test commands
+│   ├── flarbor-job/          Batch job orchestration and optional JobObject helper
 │   └── flarbor-reward/       Reward/scoring kit for evaluating agent outputs
 └── environments/
     └── code-change/
@@ -89,6 +90,10 @@ const result = await run(
 Core library for offloading heavyweight build/test commands from a Durable Object agent loop to Cloudflare Sandbox/Containers. It exports a `ContainerRunner`, workspace sync helpers, command allowlist validation, and an AI SDK-compatible `createContainerCommandTool()`.
 
 The package is intentionally not a deployable Worker. Environments provide the Sandbox binding, container image, command policy, and prompt wiring.
+
+### `packages/flarbor-job`
+
+Batch orchestration for running task sets across agent targets with bounded concurrency, retries, lifecycle hooks, and aggregate stats. The pure `runJob()` runner is in-request; the optional `JobObject` Durable Object helper adds RPC methods for persisted `start()`, `get()`, and `cancel()` state.
 
 ### `environments/code-change/`
 
@@ -174,10 +179,11 @@ Run 3-5 trials per side with the same repo and instruction. LLM output is non-de
 - [x] Core library (`FlarborEnvironment`, `GitWorkspace`, task runner)
 - [x] Reward/scoring kit (`flarbor-reward`)
 - [x] `flarbor-container` — Sandbox SDK integration for build/test offload
+- [x] `flarbor-job` — batch runner plus optional persisted Job DO helper
 - [x] Code-change environment with Harbor comparison
 - [ ] End-to-end validation on deployed Workers
 - [ ] Eval runner environment (run task datasets, collect results)
-- [ ] Job orchestration via DO sub-agents (Facets)
+- [ ] Queue-backed job orchestration for larger/background workloads
 - [ ] Task/dataset registry
 
 ## License

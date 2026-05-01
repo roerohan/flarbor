@@ -5,11 +5,12 @@ import { Workspace } from "@cloudflare/think";
 import { z } from "zod";
 import { GitWorkspace } from "flarbor";
 import type { RewardResult, TaskConfig, TrialResult } from "flarbor";
-import { runJob } from "flarbor-job";
-import type { AgentTargetConfig, JobConfig } from "flarbor-job";
+import { JobObject, createJobId, runJob } from "flarbor-job";
+import type { AgentTargetConfig, JobConfig, JobResult, TrialConfig } from "flarbor-job";
 
 interface Env {
   REPO_AUDIT_AGENT: DurableObjectNamespace<RepoAuditAgent>;
+  REPO_AUDIT_JOB: DurableObjectNamespace<RepoAuditJob>;
   ANTHROPIC_API_KEY?: string;
   MODEL_NAME?: string;
 }
@@ -419,6 +420,26 @@ export class RepoAuditAgent extends DurableObject<Env> {
   }
 }
 
+export class RepoAuditJob extends JobObject<Env> {
+  async start(config: JobConfig): Promise<JobResult> {
+    return super.start(config);
+  }
+
+  async get(): Promise<JobResult | undefined> {
+    return super.get();
+  }
+
+  async cancel(): Promise<JobResult> {
+    return super.cancel();
+  }
+
+  protected resolveAgent(_target: AgentTargetConfig, trial: TrialConfig) {
+    return this.env.REPO_AUDIT_AGENT.getByName(
+      `${trial.task.repoUrl}:${trial.id}:${crypto.randomUUID()}`,
+    );
+  }
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -457,6 +478,40 @@ export default {
           ),
       });
       return Response.json(result, { status: result.status === "completed" ? 200 : 500 });
+    }
+
+    if (url.pathname === "/jobs" && request.method === "POST") {
+      let config: JobConfig;
+      try {
+        const body = JobConfigSchema.parse(await request.json());
+        config = { ...body, agents: [AUDIT_AGENT] };
+      } catch (err: unknown) {
+        if (err instanceof z.ZodError) return responseForZodError(err);
+        throw err;
+      }
+
+      const id = createJobId(config);
+      const stub = env.REPO_AUDIT_JOB.getByName(id);
+      const result: JobResult = await stub.start(config);
+      return Response.json(result, { status: result.status === "completed" ? 200 : 500 });
+    }
+
+    const cancelMatch = url.pathname.match(/^\/jobs\/([^/]+)\/cancel$/);
+    if (cancelMatch && request.method === "POST") {
+      const id = decodeURIComponent(cancelMatch[1]);
+      const stub = env.REPO_AUDIT_JOB.getByName(id);
+      const result: JobResult = await stub.cancel();
+      return Response.json(result);
+    }
+
+    const jobMatch = url.pathname.match(/^\/jobs\/([^/]+)$/);
+    if (jobMatch && request.method === "GET") {
+      const id = decodeURIComponent(jobMatch[1]);
+      const stub = env.REPO_AUDIT_JOB.getByName(id);
+      const result: JobResult | undefined = await stub.get();
+      if (!result)
+        return Response.json({ success: false, error: "Job not found" }, { status: 404 });
+      return Response.json(result);
     }
 
     return new Response("Not found", { status: 404 });

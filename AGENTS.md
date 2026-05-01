@@ -15,6 +15,11 @@ flarbor/
 │   │       ├── agent-runner.ts  runTask() — dispatches tasks to DO stubs
 │   │       ├── glob.ts          Shared glob-to-regex utility
 │   │       └── types.ts         TaskConfig, TrialResult, EnvironmentConfig, etc.
+│   ├── flarbor-job/             Batch job orchestration
+│   │   └── src/
+│   │       ├── job.ts           runJob(), createTrialConfigs()
+│   │       ├── object.ts        JobObject Durable Object RPC helper
+│   │       └── types.ts         JobConfig, TrialRecord, JobResult, etc.
 │   └── flarbor-reward/          Reward/scoring kit
 │       └── src/
 │           ├── index.ts         Public API re-exports
@@ -62,6 +67,10 @@ Wraps `@cloudflare/shell` Workspace + `@cloudflare/shell/git`. Provides `clone()
 ### Reward kit (`packages/flarbor-reward/`)
 
 Composable scoring. `criterion()` wraps an evaluate function. `reward()` groups criteria with an aggregation strategy. `run()` evaluates all rewards against a `CriterionContext` and returns a `RewardResult`. Built-in criteria cover files, diffs, tokens, and trajectories. `judge()` creates LLM-as-judge criteria.
+
+### Job kit (`packages/flarbor-job/`)
+
+Batch orchestration. `runJob()` expands tasks x agents x attempts, runs trials with bounded concurrency, retries orchestration failures, emits hooks, and computes stats. `JobObject` is an optional Durable Object helper with RPC methods `start()`, `get()`, and `cancel()` for persisted job state. Public HTTP routes remain environment-owned.
 
 ## Conventions
 
