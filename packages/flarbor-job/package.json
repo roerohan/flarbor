@@ -10,7 +10,8 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "flarbor": "workspace:*"
+    "flarbor": "workspace:*",
+    "flarbor-shared": "workspace:*"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "latest",

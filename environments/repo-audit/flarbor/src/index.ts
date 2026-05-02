@@ -1,14 +1,15 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
-import { DurableObject } from "cloudflare:workers";
 import { generateText } from "ai";
 import { Workspace } from "@cloudflare/think";
 import { z } from "zod";
-import { GitWorkspace } from "flarbor";
-import type { RewardResult, TaskConfig, TrialResult } from "flarbor";
+import { FlarborEnvironment } from "flarbor";
+import type { EnvironmentConfig, FlarborEnv, TaskConfig, TrialResult, RewardResult } from "flarbor";
+import { run as scoreRun, reward, criterion } from "flarbor-reward";
+import type { CriterionContext } from "flarbor-reward";
 import { JobObject, createJobId, runJob } from "flarbor-job";
-import type { AgentTargetConfig, JobConfig, JobResult, TrialConfig } from "flarbor-job";
+import type { AgentTargetConfig, FetcherLike, JobConfig, JobResult, TrialConfig } from "flarbor-job";
 
-interface Env {
+interface Env extends FlarborEnv {
   REPO_AUDIT_AGENT: DurableObjectNamespace<RepoAuditAgent>;
   REPO_AUDIT_JOB: DurableObjectNamespace<RepoAuditJob>;
   ANTHROPIC_API_KEY?: string;
@@ -213,21 +214,22 @@ function parseAuditReport(raw: unknown, task: TaskConfig, model: string): RepoAu
   return AuditReportSchema.parse(normalized);
 }
 
-function auditReward(report: RepoAuditReport): RewardResult {
-  const criteria = [
-    { name: "documentation", score: report.scores.documentation, weight: 1 },
-    { name: "testing", score: report.scores.testing, weight: 1 },
-    { name: "packaging", score: report.scores.packaging, weight: 1 },
-    { name: "maintainability", score: report.scores.maintainability, weight: 1 },
-    { name: "deployment_readiness", score: report.scores.deploymentReadiness, weight: 1 },
-  ];
-  const score = criteria.reduce((sum, criterion) => sum + criterion.score, 0) / criteria.length;
-  return {
-    score,
-    totalCriteria: criteria.length,
-    errors: 0,
-    rewards: [{ name: "repo_audit", score, criteria, aggregation: "weighted_mean" }],
-  };
+function auditReward(report: RepoAuditReport, ctx: CriterionContext): Promise<RewardResult> {
+  return scoreRun(
+    [
+      reward({
+        name: "repo_audit",
+        criteria: [
+          criterion({ name: "documentation", evaluate: () => report.scores.documentation }),
+          criterion({ name: "testing", evaluate: () => report.scores.testing }),
+          criterion({ name: "packaging", evaluate: () => report.scores.packaging }),
+          criterion({ name: "maintainability", evaluate: () => report.scores.maintainability }),
+          criterion({ name: "deployment_readiness", evaluate: () => report.scores.deploymentReadiness }),
+        ],
+      }),
+    ],
+    ctx,
+  );
 }
 
 async function safeReadFile(workspace: Workspace, path: string): Promise<string | null> {
@@ -321,13 +323,22 @@ function buildPrompt(task: TaskConfig, snapshot: RepoSnapshot, model: string): s
   ].join("\n");
 }
 
-export class RepoAuditAgent extends DurableObject<Env> {
-  private workspace = new Workspace({
-    sql: this.ctx.storage.sql,
-    name: () => this.ctx.id.toString(),
-  });
+/**
+ * Non-agentic environment for repo audits.
+ *
+ * Extends FlarborEnvironment for workspace and git infrastructure but uses
+ * direct `generateText` calls instead of the multi-turn agent loop.
+ */
+export class RepoAuditAgent extends FlarborEnvironment<Env> {
+  getEnvironmentConfig(): EnvironmentConfig {
+    const modelName = this.env.MODEL_NAME || "claude-opus-4-6";
+    return {
+      model: createAnthropic({ apiKey: this.env.ANTHROPIC_API_KEY })(modelName),
+      systemPrompt: "Repository auditor.",
+    };
+  }
 
-  async fetch(request: Request): Promise<Response> {
+  override async onRequest(request: Request): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname !== "/run" || request.method !== "POST") {
       return new Response("Not found", { status: 404 });
@@ -351,31 +362,30 @@ export class RepoAuditAgent extends DurableObject<Env> {
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       console.error(`[repo-audit] failed repo=${task.repoUrl} error=${message}`);
+
+      const errorReport: RepoAuditReport = {
+        repoUrl: task.repoUrl,
+        model: "error",
+        summary: message,
+        scores: { documentation: 0, testing: 0, packaging: 0, maintainability: 0, deploymentReadiness: 0 },
+        findings: [],
+        inspectedFiles: [],
+      };
+      const errorCtx: CriterionContext = {
+        workspace: this.workspace,
+        filesChanged: [],
+        success: false,
+        error: message,
+      };
+      const rewardResult = await auditReward(errorReport, errorCtx);
+
       return {
         success: false,
         branch: "",
         commitSha: "",
         filesChanged: [],
         error: message,
-        reward: {
-          score: 0,
-          totalCriteria: 5,
-          errors: 1,
-          rewards: [
-            {
-              name: "repo_audit",
-              score: 0,
-              aggregation: "weighted_mean",
-              criteria: [
-                { name: "documentation", score: 0, weight: 1, error: message },
-                { name: "testing", score: 0, weight: 1, error: message },
-                { name: "packaging", score: 0, weight: 1, error: message },
-                { name: "maintainability", score: 0, weight: 1, error: message },
-                { name: "deployment_readiness", score: 0, weight: 1, error: message },
-              ],
-            },
-          ],
-        },
+        reward: rewardResult,
         metadata: { auditError: message },
       };
     }
@@ -392,8 +402,7 @@ export class RepoAuditAgent extends DurableObject<Env> {
     const model = createAnthropic({ apiKey: this.env.ANTHROPIC_API_KEY })(modelName);
     const startedAt = Date.now();
 
-    const gitWorkspace = new GitWorkspace(this.workspace);
-    await gitWorkspace.clone(task.repoUrl);
+    await this.gitWorkspace.clone(task.repoUrl);
     const snapshot = await collectSnapshot(this.workspace);
     const prompt = buildPrompt(task, snapshot, modelName);
     const generated = await generateText({ model, prompt });
@@ -404,8 +413,16 @@ export class RepoAuditAgent extends DurableObject<Env> {
       totalTokens: generated.usage?.totalTokens ?? 0,
     };
 
+    const auditCtx: CriterionContext = {
+      workspace: this.workspace,
+      filesChanged: [],
+      success: true,
+      usage,
+    };
+    const rewardResult = await auditReward(report, auditCtx);
+
     console.log(
-      `[repo-audit] complete repo=${task.repoUrl} score=${auditReward(report).score.toFixed(3)} duration=${Date.now() - startedAt}ms`,
+      `[repo-audit] complete repo=${task.repoUrl} score=${rewardResult.score.toFixed(3)} duration=${Date.now() - startedAt}ms`,
     );
 
     return {
@@ -414,26 +431,14 @@ export class RepoAuditAgent extends DurableObject<Env> {
       commitSha: "",
       filesChanged: [],
       usage,
-      reward: auditReward(report),
+      reward: rewardResult,
       metadata: { audit: report },
     };
   }
 }
 
 export class RepoAuditJob extends JobObject<Env> {
-  async start(config: JobConfig): Promise<JobResult> {
-    return super.start(config);
-  }
-
-  async get(): Promise<JobResult | undefined> {
-    return super.get();
-  }
-
-  async cancel(): Promise<JobResult> {
-    return super.cancel();
-  }
-
-  protected resolveAgent(_target: AgentTargetConfig, trial: TrialConfig) {
+  protected resolveAgent(_target: AgentTargetConfig, trial: TrialConfig): FetcherLike {
     return this.env.REPO_AUDIT_AGENT.getByName(
       `${trial.task.repoUrl}:${trial.id}:${crypto.randomUUID()}`,
     );

@@ -1,13 +1,12 @@
+import { agentById, jobStatus, terminal } from "./helpers.js";
 import { emit, type Hook } from "./hooks.js";
 import { runQueue } from "./queue.js";
 import { computeStats } from "./stats.js";
 import { runTrial } from "./trial.js";
 import type {
   AgentResolver,
-  AgentTargetConfig,
   JobConfig,
   JobResult,
-  JobStatus,
   TrialConfig,
   TrialRecord,
 } from "./types.js";
@@ -55,22 +54,33 @@ export function createTrialConfigs(config: JobConfig): TrialConfig[] {
   return trials;
 }
 
-function agentById(agents: readonly AgentTargetConfig[], agentId: string): AgentTargetConfig {
-  const agent = agents.find((candidate) => candidate.id === agentId);
-  if (!agent) throw new Error(`Unknown agent target "${agentId}" for trial dispatch`);
-  return agent;
-}
-
-function jobStatus(records: readonly TrialRecord[]): JobStatus {
-  if (records.some((record) => record.status === "running" || record.status === "pending")) {
-    return "running";
-  }
-  return records.some((record) => record.status === "failed") ? "failed" : "completed";
-}
+/**
+ * Called after every trial starts or finishes so persistent orchestrators
+ * (like {@link JobObject}) can snapshot intermediate state.
+ *
+ * Return `void` or a `Promise<void>` — the queue awaits the result before
+ * continuing.
+ */
+export type PersistenceHook = (
+  trials: readonly TrialRecord[],
+  finishedAt?: string,
+) => void | Promise<void>;
 
 export interface RunJobOptions {
   resolveAgent: AgentResolver;
   hooks?: readonly Hook[];
+
+  /**
+   * Pre-existing trial records from a previous run (for resumption).
+   * Trials whose status is terminal will be reused; the rest are re-run.
+   */
+  previousTrials?: ReadonlyMap<string, TrialRecord>;
+
+  /**
+   * Called after every trial state change so the caller can persist
+   * intermediate state. Used by {@link JobObject} for DO storage.
+   */
+  onPersist?: PersistenceHook;
 }
 
 export async function runJob(config: JobConfig, options: RunJobOptions): Promise<JobResult> {
@@ -81,9 +91,64 @@ export async function runJob(config: JobConfig, options: RunJobOptions): Promise
   await emit(options.hooks, { type: "job_started", jobId: id, at: startedAt });
 
   const trialConfigs = createTrialConfigs({ ...config, id });
-  const trials = await runQueue(trialConfigs, {
+  const previous = options.previousTrials ?? new Map();
+
+  // Build the mutable trials array, reusing terminal records from previous runs
+  const trials: TrialRecord[] = trialConfigs.map((trialConfig) => {
+    const existing = previous.get(trialConfig.id);
+    if (existing && terminal(existing.status)) {
+      return existing;
+    }
+    return { config: trialConfig, status: "pending" as const, tries: 0 };
+  });
+
+  const trialIndex = new Map(trials.map((record, index) => [record.config.id, index]));
+
+  const buildResult = (finishedAt?: string): JobResult => ({
+    id,
+    name: config.name,
+    status: jobStatus(trials),
+    startedAt,
+    finishedAt,
+    durationMs: Date.now() - start,
+    config: { ...config, id },
+    trials: trials.map((record) => ({ ...record })),
+    stats: computeStats(trials),
+  });
+
+  if (options.onPersist) {
+    await options.onPersist(trials);
+  }
+
+  // Only run trials that are not already terminal
+  const remaining = trialConfigs.filter((trialConfig) => {
+    const existing = previous.get(trialConfig.id);
+    return !existing || !terminal(existing.status);
+  });
+
+  await runQueue(remaining, {
     concurrency: config.concurrency,
-    hooks: options.hooks,
+    hooks: [
+      async (event) => {
+        await emit(options.hooks, event);
+        if (event.type === "trial_started") {
+          const index = trialIndex.get(event.trialId);
+          if (index === undefined) return;
+          trials[index] = {
+            ...trials[index],
+            status: "running",
+            startedAt: event.at,
+          };
+          if (options.onPersist) await options.onPersist(trials);
+        }
+        if (event.type === "trial_finished") {
+          const index = trialIndex.get(event.trialId);
+          if (index === undefined) return;
+          trials[index] = event.record;
+          if (options.onPersist) await options.onPersist(trials);
+        }
+      },
+    ],
     runTrial: (trialConfig) =>
       runTrial(trialConfig, {
         agent: agentById(config.agents, trialConfig.agentId),
@@ -93,17 +158,11 @@ export async function runJob(config: JobConfig, options: RunJobOptions): Promise
   });
 
   const finishedAt = new Date().toISOString();
-  const result: JobResult = {
-    id,
-    name: config.name,
-    status: jobStatus(trials),
-    startedAt,
-    finishedAt,
-    durationMs: Date.now() - start,
-    config: { ...config, id },
-    trials,
-    stats: computeStats(trials),
-  };
+  const result = buildResult(finishedAt);
+
+  if (options.onPersist) {
+    await options.onPersist(trials, finishedAt);
+  }
 
   await emit(options.hooks, { type: "job_finished", jobId: id, result, at: finishedAt });
   return result;

@@ -16,42 +16,9 @@ export interface TrialResult {
   commitSha: string;
   filesChanged: string[];
   error?: string;
-  usage?: TokenUsage;
-  reward?: RewardResult;
+  usage?: import("flarbor-shared").TokenUsage;
+  reward?: import("flarbor-shared").RewardResult;
   metadata?: Record<string, unknown>;
-}
-
-export interface TokenUsage {
-  inputTokens: number;
-  outputTokens: number;
-  totalTokens: number;
-}
-
-/**
- * Defined here so both flarbor and flarbor-reward share the same shape
- * without creating a package dependency cycle.
- */
-export interface RewardResult {
-  score: number;
-  rewards: RewardScore[];
-  totalCriteria: number;
-  errors: number;
-}
-
-export type AggregationStrategy = "weighted_mean" | "all_pass" | "any_pass" | "min" | "max";
-
-export interface RewardScore {
-  name: string;
-  score: number;
-  criteria: CriterionResult[];
-  aggregation: AggregationStrategy;
-}
-
-export interface CriterionResult {
-  name: string;
-  score: number;
-  weight: number;
-  error?: string;
 }
 
 export interface GitConfig {
@@ -75,7 +42,7 @@ export interface EnvironmentConfig {
 
 export interface FlarborEnv {
   AI?: Ai;
-  LOADER: WorkerLoader;
+  LOADER?: WorkerLoader;
   GITHUB_TOKEN?: string;
   ANTHROPIC_API_KEY?: string;
 }

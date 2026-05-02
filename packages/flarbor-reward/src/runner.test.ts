@@ -2,26 +2,11 @@ import { describe, expect, it } from "vitest";
 import { criterion } from "./criterion.js";
 import { reward } from "./reward.js";
 import { run } from "./runner.js";
-import type { CriterionContext, WorkspaceLike } from "./types.js";
-
-function workspace(): WorkspaceLike {
-  return {
-    async readFile() {
-      return null;
-    },
-    async readDir() {
-      return [];
-    },
-  };
-}
-
-function context(): CriterionContext {
-  return { workspace: workspace(), filesChanged: [], success: true };
-}
+import { mockContext } from "flarbor-shared/testing";
 
 describe("run", () => {
   it("returns an empty summary when there are no rewards", async () => {
-    await expect(run([], context())).resolves.toEqual({
+    await expect(run([], mockContext())).resolves.toEqual({
       score: 0,
       rewards: [],
       totalCriteria: 0,
@@ -51,7 +36,7 @@ describe("run", () => {
           ],
         }),
       ],
-      context(),
+      mockContext(),
     );
 
     expect(result.score).toBe(0.375);

@@ -1,3 +1,4 @@
+import { budgetDecay } from "flarbor-shared";
 import { criterion } from "../criterion.js";
 import type { Criterion, CriterionContext } from "../types.js";
 
@@ -14,9 +15,7 @@ export function stepBudget(maxSteps?: number, weight?: number): Criterion {
       const budget = maxSteps ?? ctx.maxSteps;
       const used = ctx.steps;
       if (budget === undefined || used === undefined) return 1.0;
-      if (used <= budget) return 1.0;
-      if (used >= budget * 2) return 0.0;
-      return 1.0 - (used - budget) / budget;
+      return budgetDecay(used, budget);
     },
   });
 }

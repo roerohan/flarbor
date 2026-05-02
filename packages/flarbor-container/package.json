@@ -11,7 +11,8 @@
   },
   "dependencies": {
     "@cloudflare/sandbox": "latest",
-    "ai": "latest"
+    "ai": "latest",
+    "flarbor-shared": "workspace:*"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "latest",
