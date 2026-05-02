@@ -119,4 +119,3 @@ function addEntry(
   seen.add(normalized);
 }
 
-// WorkspaceEntry imported from ./types.js via WorkspaceLike

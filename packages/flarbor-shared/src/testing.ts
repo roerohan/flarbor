@@ -5,8 +5,6 @@
  */
 import type { CriterionContext, WorkspaceLike } from "./types.js";
 
-export type { CriterionContext } from "./types.js";
-
 /**
  * Build a mock WorkspaceLike from a flat file map.
  */

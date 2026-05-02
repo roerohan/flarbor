@@ -12,7 +12,6 @@ import type { AgentTargetConfig, FetcherLike, JobConfig, JobResult, TrialConfig 
 interface Env extends FlarborEnv {
   REPO_AUDIT_AGENT: DurableObjectNamespace<RepoAuditAgent>;
   REPO_AUDIT_JOB: DurableObjectNamespace<RepoAuditJob>;
-  ANTHROPIC_API_KEY?: string;
   MODEL_NAME?: string;
 }
 

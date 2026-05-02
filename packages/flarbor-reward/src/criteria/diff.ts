@@ -1,5 +1,4 @@
-import { globToRegex } from "flarbor-shared";
-import { budgetDecay } from "flarbor-shared";
+import { globToRegex, budgetDecay } from "flarbor-shared";
 import { criterion } from "../criterion.js";
 import type { Criterion, CriterionContext } from "../types.js";
 

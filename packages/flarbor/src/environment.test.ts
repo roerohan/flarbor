@@ -4,7 +4,8 @@ import { createExecuteTool } from "@cloudflare/think/tools/execute";
 import { createWorkspaceTools } from "@cloudflare/think/tools/workspace";
 
 import { FlarborEnvironment } from "./environment.js";
-import type { EnvironmentConfig, FlarborEnv, TokenUsage } from "./types.js";
+import type { TokenUsage } from "flarbor-shared";
+import type { EnvironmentConfig, FlarborEnv } from "./types.js";
 
 const executeTool = { name: "execute" };
 

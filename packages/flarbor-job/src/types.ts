@@ -1,5 +1,5 @@
 import type { TaskConfig, TrialResult } from "flarbor";
-import type { FetcherLike, TokenUsage } from "flarbor-shared";
+import type { FetcherLike } from "flarbor-shared";
 
 export type { FetcherLike } from "flarbor-shared";
 
