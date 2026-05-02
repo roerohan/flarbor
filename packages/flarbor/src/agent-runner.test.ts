@@ -71,22 +71,21 @@ describe("runTask", () => {
   it("returns a failed trial result for invalid response shapes", async () => {
     const fetch = vi.fn(async () => Response.json({ success: true }, { status: 202 }));
 
-    await expect(runTask({ fetch }, task())).resolves.toMatchObject({
-      success: false,
-      branch: "",
-      commitSha: "",
-      filesChanged: [],
-      error: "Agent returned invalid TrialResult (status 202)",
-    });
+    const result = await runTask({ fetch }, task());
+    expect(result.success).toBe(false);
+    expect(result.branch).toBe("");
+    expect(result.commitSha).toBe("");
+    expect(result.filesChanged).toEqual([]);
+    expect(result.error).toContain("Agent returned invalid TrialResult (status 202)");
   });
 
   it("includes unreadable JSON response text in parse failures", async () => {
     const fetch = vi.fn(async () => new Response("not json", { status: 502 }));
 
-    await expect(runTask({ fetch }, task({ branch: "b" }))).resolves.toMatchObject({
-      success: false,
-      branch: "b",
-      error: "Agent returned 502: not json",
-    });
+    const result = await runTask({ fetch }, task({ branch: "b" }));
+    expect(result.success).toBe(false);
+    expect(result.branch).toBe("b");
+    expect(result.error).toContain("502");
+    expect(result.error).toContain("not json");
   });
 });

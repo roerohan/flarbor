@@ -1,4 +1,5 @@
 import type { Sandbox } from "@cloudflare/sandbox";
+import type { WorkspaceLike as BaseWorkspaceLike } from "flarbor-shared";
 
 export type SandboxNamespace = DurableObjectNamespace<Sandbox>;
 
@@ -9,8 +10,13 @@ export interface WorkspaceEntry {
   type: string;
 }
 
-export interface WorkspaceLike {
-  readFile(path: string): Promise<string | null>;
+/**
+ * Extended workspace interface for container operations.
+ *
+ * Extends the base `WorkspaceLike` from flarbor-shared with binary file
+ * support and typed `WorkspaceEntry` returns for `readDir`/`glob`.
+ */
+export interface WorkspaceLike extends BaseWorkspaceLike {
   readFileBytes?(path: string): Promise<Uint8Array | null>;
   readDir(dir?: string, opts?: { limit?: number; offset?: number }): Promise<WorkspaceEntry[]>;
   glob?(pattern: string): Promise<WorkspaceEntry[]>;

@@ -1,3 +1,4 @@
+import { budgetDecay } from "flarbor-shared";
 import { criterion } from "../criterion.js";
 import type { Criterion, CriterionContext } from "../types.js";
 
@@ -11,10 +12,7 @@ export function tokenBudget(maxTokens: number, weight?: number): Criterion {
     weight,
     evaluate: (ctx: CriterionContext) => {
       if (!ctx.usage) return 1.0;
-      const used = ctx.usage.totalTokens;
-      if (used <= maxTokens) return 1.0;
-      if (used >= maxTokens * 2) return 0.0;
-      return 1.0 - (used - maxTokens) / maxTokens;
+      return budgetDecay(ctx.usage.totalTokens, maxTokens);
     },
   });
 }

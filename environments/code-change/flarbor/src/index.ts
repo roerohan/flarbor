@@ -177,6 +177,7 @@ export class FlarborAgent extends FlarborEnvironment<Env> {
       filesChanged,
       success: true,
       usage: this.tokenUsage,
+      steps: this.stepCount,
       maxSteps: this.maxSteps,
     });
 
@@ -210,6 +211,7 @@ export class FlarborAgent extends FlarborEnvironment<Env> {
       success: false,
       usage: this.tokenUsage,
       error,
+      steps: this.stepCount,
       maxSteps: this.maxSteps,
     });
 

@@ -34,6 +34,30 @@ describe("globToRegex", () => {
     expect(regex.test("docs/README.md")).toBe(false);
     expect(regex.test("README.md.bak")).toBe(false);
   });
+
+  it("matches ? as a single non-separator character", () => {
+    const regex = globToRegex("src/?.ts");
+
+    expect(regex.test("src/a.ts")).toBe(true);
+    expect(regex.test("src/ab.ts")).toBe(false);
+    expect(regex.test("src//.ts")).toBe(false);
+  });
+
+  it("handles **/ as an optional prefix", () => {
+    const regex = globToRegex("**/foo.ts");
+
+    expect(regex.test("foo.ts")).toBe(true);
+    expect(regex.test("src/foo.ts")).toBe(true);
+    expect(regex.test("src/nested/foo.ts")).toBe(true);
+  });
+
+  it("matches .git/** pattern", () => {
+    const regex = globToRegex(".git/**");
+
+    expect(regex.test(".git/config")).toBe(true);
+    expect(regex.test(".git/refs/heads/main")).toBe(true);
+    expect(regex.test(".github/workflows/ci.yml")).toBe(false);
+  });
 });
 
 describe("matchesGlob", () => {

@@ -1,4 +1,5 @@
-import { dispatchTask } from "./dispatch.js";
+import { dispatchTask } from "flarbor-shared";
+import type { TrialResult } from "flarbor";
 import type {
   AgentResolver,
   AgentTargetConfig,
@@ -28,7 +29,7 @@ export async function runTrial(
   try {
     const { value: result, tries } = await withRetry(async () => {
       const stub = options.resolveAgent(options.agent, config);
-      return dispatchTask(stub, config.task);
+      return dispatchTask<TrialResult>(stub, config.task);
     }, options.retry);
 
     const finishedAt = new Date().toISOString();

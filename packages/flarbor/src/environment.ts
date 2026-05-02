@@ -10,7 +10,7 @@ import type {
   ChatResponseResult,
 } from "@cloudflare/think";
 
-import { matchesGlob } from "./glob.js";
+import { matchesGlob } from "flarbor-shared";
 import { GitWorkspace } from "./workspace.js";
 import type { TokenUsage, EnvironmentConfig, FlarborEnv } from "./types.js";
 
@@ -40,6 +40,10 @@ export abstract class FlarborEnvironment<Env extends FlarborEnv = FlarborEnv> ex
   private _turnError: string | null = null;
   private _turnCompleted = false;
   private _stepCount = 0;
+
+  protected get stepCount(): number {
+    return this._stepCount;
+  }
 
   protected get envConfig(): EnvironmentConfig {
     this._config ??= this.getEnvironmentConfig();

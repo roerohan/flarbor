@@ -1,22 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { criterion } from "./criterion.js";
 import { evaluateReward, reward } from "./reward.js";
-import type { CriterionContext, WorkspaceLike } from "./types.js";
-
-function workspace(): WorkspaceLike {
-  return {
-    async readFile() {
-      return null;
-    },
-    async readDir() {
-      return [];
-    },
-  };
-}
-
-function context(): CriterionContext {
-  return { workspace: workspace(), filesChanged: [], success: true };
-}
+import { mockContext } from "flarbor-shared/testing";
 
 describe("reward", () => {
   it("preserves metadata and defaults aggregation to weighted_mean", () => {
@@ -40,7 +25,7 @@ describe("reward", () => {
       ],
     });
 
-    const result = await evaluateReward(r, context());
+    const result = await evaluateReward(r, mockContext());
 
     expect(result.score).toBe(0.8125);
     expect(result.criteria).toEqual([
@@ -52,7 +37,7 @@ describe("reward", () => {
 
   it("returns zero for empty criteria and zero total weight", async () => {
     await expect(
-      evaluateReward(reward({ name: "empty", criteria: [] }), context()),
+      evaluateReward(reward({ name: "empty", criteria: [] }), mockContext()),
     ).resolves.toMatchObject({ score: 0, criteria: [] });
 
     const zeroWeight = reward({
@@ -60,7 +45,7 @@ describe("reward", () => {
       criteria: [criterion({ name: "ignored", weight: 0, evaluate: () => 1 })],
     });
 
-    await expect(evaluateReward(zeroWeight, context())).resolves.toMatchObject({ score: 0 });
+    await expect(evaluateReward(zeroWeight, mockContext())).resolves.toMatchObject({ score: 0 });
   });
 
   it("supports all aggregation strategies", async () => {
@@ -71,16 +56,16 @@ describe("reward", () => {
     ];
 
     await expect(
-      evaluateReward(reward({ name: "all", aggregation: "all_pass", criteria }), context()),
+      evaluateReward(reward({ name: "all", aggregation: "all_pass", criteria }), mockContext()),
     ).resolves.toMatchObject({ score: 0 });
     await expect(
-      evaluateReward(reward({ name: "any", aggregation: "any_pass", criteria }), context()),
+      evaluateReward(reward({ name: "any", aggregation: "any_pass", criteria }), mockContext()),
     ).resolves.toMatchObject({ score: 1 });
     await expect(
-      evaluateReward(reward({ name: "min", aggregation: "min", criteria }), context()),
+      evaluateReward(reward({ name: "min", aggregation: "min", criteria }), mockContext()),
     ).resolves.toMatchObject({ score: 0 });
     await expect(
-      evaluateReward(reward({ name: "max", aggregation: "max", criteria }), context()),
+      evaluateReward(reward({ name: "max", aggregation: "max", criteria }), mockContext()),
     ).resolves.toMatchObject({ score: 1 });
   });
 
@@ -93,7 +78,7 @@ describe("reward", () => {
       ],
     });
 
-    const result = await evaluateReward(r, context());
+    const result = await evaluateReward(r, mockContext());
 
     expect(result.score).toBe(0.5);
     expect(result.criteria).toEqual([
@@ -123,7 +108,7 @@ describe("reward", () => {
       ],
     });
 
-    const result = await evaluateReward(r, context());
+    const result = await evaluateReward(r, mockContext());
 
     expect(result.score).toBe(0);
     expect(result.criteria).toEqual([

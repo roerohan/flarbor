@@ -1,4 +1,7 @@
-import type { TaskConfig, TokenUsage, TrialResult } from "flarbor";
+import type { TaskConfig, TrialResult } from "flarbor";
+import type { FetcherLike, TokenUsage } from "flarbor-shared";
+
+export type { FetcherLike } from "flarbor-shared";
 
 export type JobStatus = "pending" | "running" | "completed" | "failed" | "cancelled";
 
@@ -87,12 +90,7 @@ export interface JobResult {
   stats: JobStats;
 }
 
-export interface FetcherLike {
-  fetch(request: Request): Promise<Response>;
-}
-
 export type AgentResolver = (target: AgentTargetConfig, trial: TrialConfig) => FetcherLike;
 
 export type TrialRunner = (config: TrialConfig) => Promise<TrialRecord>;
 
-export type TokenUsageSelector = (record: TrialRecord) => TokenUsage | undefined;
