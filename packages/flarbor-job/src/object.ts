@@ -1,56 +1,27 @@
 import { DurableObject } from "cloudflare:workers";
-import { emit, type Hook } from "./hooks.js";
-import { createJobId, createTrialConfigs } from "./job.js";
-import { runQueue } from "./queue.js";
+import { terminal } from "./helpers.js";
+import { createJobId, runJob } from "./job.js";
 import { computeStats } from "./stats.js";
-import { runTrial } from "./trial.js";
+import type { Hook } from "./hooks.js";
 import type {
   AgentTargetConfig,
-  FetcherLike,
   JobConfig,
   JobResult,
-  JobStatus,
   TrialConfig,
   TrialRecord,
-  TrialStatus,
 } from "./types.js";
+import type { FetcherLike } from "flarbor-shared";
 
 const JOB_RESULT_KEY = "job:result";
 
-function terminal(status: TrialStatus): boolean {
-  return status === "succeeded" || status === "failed" || status === "cancelled";
-}
-
-function agentById(agents: readonly AgentTargetConfig[], agentId: string): AgentTargetConfig {
-  const agent = agents.find((candidate) => candidate.id === agentId);
-  if (!agent) throw new Error(`Unknown agent target "${agentId}" for trial dispatch`);
-  return agent;
-}
-
-function jobStatus(records: readonly TrialRecord[]): JobStatus {
-  if (records.some((record) => record.status === "running" || record.status === "pending")) {
-    return "running";
-  }
-  return records.some((record) => record.status === "failed") ? "failed" : "completed";
-}
-
-function recordsById(records: readonly TrialRecord[]): Map<string, TrialRecord> {
-  return new Map(records.map((record) => [record.config.id, record]));
-}
-
-function pendingRecord(config: TrialConfig): TrialRecord {
-  return { config, status: "pending", tries: 0 };
-}
-
-function cancelRecord(record: TrialRecord, finishedAt: string): TrialRecord {
-  return {
-    ...record,
-    status: "cancelled",
-    finishedAt,
-    durationMs: record.durationMs ?? 0,
-  };
-}
-
+/**
+ * Abstract Durable Object base class for persistent job orchestration.
+ *
+ * Delegates all orchestration logic to {@link runJob}, injecting a
+ * persistence hook that snapshots state to DO storage after every trial
+ * state change. This keeps the orchestration logic in one place while
+ * the DO owns only persistence, resumption, and cancellation.
+ */
 export abstract class JobObject<Env> extends DurableObject<Env> {
   protected abstract resolveAgent(target: AgentTargetConfig, trial: TrialConfig): FetcherLike;
 
@@ -60,80 +31,45 @@ export abstract class JobObject<Env> extends DurableObject<Env> {
 
   async start(config: JobConfig): Promise<JobResult> {
     const id = createJobId(config);
-    const startedAt = new Date().toISOString();
-    const start = Date.now();
-    const stored = await this.get();
-    const previous =
-      stored?.id === id ? recordsById(stored.trials) : new Map<string, TrialRecord>();
-    const trialConfigs = createTrialConfigs({ ...config, id });
-    const trials = trialConfigs.map((trialConfig) => {
-      const existing = previous.get(trialConfig.id);
-      return existing && terminal(existing.status) ? existing : pendingRecord(trialConfig);
-    });
-    const trialIndex = new Map(trials.map((record, index) => [record.config.id, index]));
-    const hooks = this.hooks();
 
+    // Load previous state for resumption
+    const stored = await this.get();
+    const previous = new Map<string, TrialRecord>();
+    if (stored?.id === id) {
+      for (const trial of stored.trials) {
+        previous.set(trial.config.id, trial);
+      }
+    }
+
+    // Chain persistence writes to avoid races
     let persistChain = Promise.resolve();
-    const buildResult = (finishedAt?: string): JobResult => ({
-      id,
-      name: config.name,
-      status: jobStatus(trials),
-      startedAt: stored?.id === id ? stored.startedAt : startedAt,
-      finishedAt,
-      durationMs: Date.now() - start,
-      config: { ...config, id },
-      trials: trials.map((record) => ({ ...record })),
-      stats: computeStats(trials),
-    });
-    const persist = (finishedAt?: string): Promise<void> => {
-      const snapshot = buildResult(finishedAt);
+    const persist = (trials: readonly TrialRecord[], finishedAt?: string): Promise<void> => {
+      const snapshot: JobResult = {
+        id,
+        name: config.name,
+        status: finishedAt
+          ? (trials.some((r) => r.status === "failed") ? "failed" : "completed")
+          : "running",
+        startedAt: stored?.id === id ? stored.startedAt : new Date().toISOString(),
+        finishedAt,
+        durationMs: 0,
+        config: { ...config, id },
+        trials: trials.map((record) => ({ ...record })),
+        stats: computeStats(trials),
+      };
       persistChain = persistChain.then(() => this.ctx.storage.put(JOB_RESULT_KEY, snapshot));
       return persistChain;
     };
 
-    await emit(hooks, { type: "job_started", jobId: id, at: startedAt });
-    await persist();
-
-    const remaining = trialConfigs.filter((trialConfig) => {
-      const existing = previous.get(trialConfig.id);
-      return !existing || !terminal(existing.status);
+    const result = await runJob(config, {
+      resolveAgent: (target, trial) => this.resolveAgent(target, trial),
+      hooks: this.hooks(),
+      previousTrials: previous,
+      onPersist: persist,
     });
 
-    await runQueue(remaining, {
-      concurrency: config.concurrency,
-      hooks: [
-        async (event) => {
-          await emit(hooks, event);
-          if (event.type === "trial_started") {
-            const index = trialIndex.get(event.trialId);
-            if (index === undefined) return;
-            trials[index] = {
-              ...trials[index],
-              status: "running",
-              startedAt: event.at,
-            };
-            await persist();
-          }
-          if (event.type === "trial_finished") {
-            const index = trialIndex.get(event.trialId);
-            if (index === undefined) return;
-            trials[index] = event.record;
-            await persist();
-          }
-        },
-      ],
-      runTrial: (trialConfig) =>
-        runTrial(trialConfig, {
-          agent: agentById(config.agents, trialConfig.agentId),
-          resolveAgent: (target, trial) => this.resolveAgent(target, trial),
-          retry: config.retry,
-        }),
-    });
-
-    const finishedAt = new Date().toISOString();
-    const result = buildResult(finishedAt);
-    await persist(finishedAt);
-    await emit(hooks, { type: "job_finished", jobId: id, result, at: finishedAt });
+    // Final persist with the complete result
+    await this.ctx.storage.put(JOB_RESULT_KEY, result);
     return result;
   }
 
@@ -147,7 +83,14 @@ export abstract class JobObject<Env> extends DurableObject<Env> {
 
     const finishedAt = new Date().toISOString();
     const trials = current.trials.map((record) =>
-      terminal(record.status) ? record : cancelRecord(record, finishedAt),
+      terminal(record.status)
+        ? record
+        : {
+            ...record,
+            status: "cancelled" as const,
+            finishedAt,
+            durationMs: record.durationMs ?? 0,
+          },
     );
     const result: JobResult = {
       ...current,

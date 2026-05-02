@@ -10,9 +10,10 @@ import type {
   ChatResponseResult,
 } from "@cloudflare/think";
 
-import { matchesGlob } from "./glob.js";
+import { matchesGlob } from "flarbor-shared";
 import { GitWorkspace } from "./workspace.js";
-import type { TokenUsage, EnvironmentConfig, FlarborEnv } from "./types.js";
+import type { TokenUsage } from "flarbor-shared";
+import type { EnvironmentConfig, FlarborEnv } from "./types.js";
 
 /**
  * Abstract base class for all Flarbor environments.
@@ -40,6 +41,10 @@ export abstract class FlarborEnvironment<Env extends FlarborEnv = FlarborEnv> ex
   private _turnError: string | null = null;
   private _turnCompleted = false;
   private _stepCount = 0;
+
+  protected get stepCount(): number {
+    return this._stepCount;
+  }
 
   protected get envConfig(): EnvironmentConfig {
     this._config ??= this.getEnvironmentConfig();

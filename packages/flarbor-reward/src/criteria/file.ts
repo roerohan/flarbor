@@ -101,20 +101,26 @@ export function diffRatio(path: string, expected: string, weight?: number): Crit
       if (actual === exp) return 1.0;
       if (actual.length === 0 && exp.length === 0) return 1.0;
 
-      const bigrams = (s: string): Set<string> => {
-        const set = new Set<string>();
+      const bigrams = (s: string): Map<string, number> => {
+        const map = new Map<string, number>();
         for (let i = 0; i < s.length - 1; i++) {
-          set.add(s.slice(i, i + 2));
+          const bg = s.slice(i, i + 2);
+          map.set(bg, (map.get(bg) ?? 0) + 1);
         }
-        return set;
+        return map;
       };
       const a = bigrams(actual);
       const b = bigrams(exp);
       let intersection = 0;
-      for (const bg of a) {
-        if (b.has(bg)) intersection++;
+      for (const [bg, countA] of a) {
+        const countB = b.get(bg) ?? 0;
+        intersection += Math.min(countA, countB);
       }
-      const denominator = a.size + b.size;
+      let sizeA = 0;
+      let sizeB = 0;
+      for (const count of a.values()) sizeA += count;
+      for (const count of b.values()) sizeB += count;
+      const denominator = sizeA + sizeB;
       if (denominator === 0) return 0;
       return (2 * intersection) / denominator;
     },

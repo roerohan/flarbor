@@ -14,7 +14,8 @@
     "@cloudflare/shell": "latest",
     "@cloudflare/think": "latest",
     "agents": "latest",
-    "ai": "latest"
+    "ai": "latest",
+    "flarbor-shared": "workspace:*"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "latest",

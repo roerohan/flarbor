@@ -1,5 +1,5 @@
-import type { TaskConfig, TrialResult } from "flarbor";
-import type { FetcherLike } from "./types.js";
+import { isTrialResult } from "./trial-result.js";
+import type { TrialResultShape } from "./trial-result.js";
 
 export type DispatchErrorKind = "fetch_failed" | "invalid_result" | "invalid_json";
 
@@ -15,22 +15,33 @@ export class DispatchError extends Error {
   }
 }
 
-function isTrialResult(value: unknown): value is TrialResult {
-  if (value === null || typeof value !== "object") return false;
-  const v = value as Record<string, unknown>;
-  return (
-    typeof v.success === "boolean" &&
-    typeof v.branch === "string" &&
-    typeof v.commitSha === "string" &&
-    Array.isArray(v.filesChanged)
-  );
+export interface DispatchTaskConfig {
+  repoUrl: string;
+  branch?: string;
+  [key: string]: unknown;
+}
+
+export interface FetcherLike {
+  fetch(request: Request): Promise<Response>;
+}
+
+/** Derive a stable room/agent name from a task config. */
+export function agentNameFor(task: DispatchTaskConfig): string {
+  return `${task.repoUrl}:${task.branch ?? "default"}`;
 }
 
 /**
- * Dispatch a task to a Flarbor agent target without importing the core package at runtime.
+ * Dispatch a task to a Flarbor agent target.
+ *
+ * Throws {@link DispatchError} on infrastructure failures (network errors,
+ * invalid JSON, or invalid response shapes). Returns a valid result
+ * on success — including when the agent itself reports `success: false`.
  */
-export async function dispatchTask(stub: FetcherLike, task: TaskConfig): Promise<TrialResult> {
-  const agentName = `${task.repoUrl}:${task.branch ?? "default"}`;
+export async function dispatchTask<T extends TrialResultShape = TrialResultShape>(
+  stub: FetcherLike,
+  task: DispatchTaskConfig,
+): Promise<T> {
+  const agentName = agentNameFor(task);
 
   let response: Response;
   try {
@@ -61,7 +72,7 @@ export async function dispatchTask(stub: FetcherLike, task: TaskConfig): Promise
     );
   }
 
-  if (isTrialResult(parsed)) return parsed;
+  if (isTrialResult(parsed)) return parsed as T;
   const preview = JSON.stringify(parsed).slice(0, 500);
   throw new DispatchError(
     "invalid_result",

@@ -1,5 +1,4 @@
 export { DEFAULT_ALLOWED_COMMANDS, isAllowedCommand, validateCommand } from "./commands.js";
-export { globToRegex, matchesGlob } from "./glob.js";
 export { truncateText } from "./output.js";
 export { ContainerRunner } from "./runner.js";
 export { createContainerCommandTool } from "./tool.js";

@@ -78,6 +78,9 @@ importers:
       flarbor-job:
         specifier: workspace:*
         version: link:../../../packages/flarbor-job
+      flarbor-reward:
+        specifier: workspace:*
+        version: link:../../../packages/flarbor-reward
       zod:
         specifier: latest
         version: 4.4.1
@@ -109,6 +112,9 @@ importers:
       ai:
         specifier: latest
         version: 6.0.170(zod@4.4.1)
+      flarbor-shared:
+        specifier: workspace:*
+        version: link:../flarbor-shared
     devDependencies:
       '@cloudflare/workers-types':
         specifier: latest
@@ -125,6 +131,9 @@ importers:
       ai:
         specifier: latest
         version: 6.0.170(zod@4.4.1)
+      flarbor-shared:
+        specifier: workspace:*
+        version: link:../flarbor-shared
     devDependencies:
       '@cloudflare/workers-types':
         specifier: latest
@@ -138,6 +147,9 @@ importers:
       flarbor:
         specifier: workspace:*
         version: link:../flarbor
+      flarbor-shared:
+        specifier: workspace:*
+        version: link:../flarbor-shared
     devDependencies:
       '@cloudflare/workers-types':
         specifier: latest
@@ -151,6 +163,15 @@ importers:
       ai:
         specifier: latest
         version: 6.0.170(zod@4.4.1)
+      flarbor-shared:
+        specifier: workspace:*
+        version: link:../flarbor-shared
+    devDependencies:
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
+  packages/flarbor-shared:
     devDependencies:
       typescript:
         specifier: ^5.7.0

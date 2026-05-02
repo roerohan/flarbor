@@ -1,7 +1,16 @@
-function escapeRegex(char: string): string {
-  return char.replace(/[|\\{}()[\]^$+?.]/g, "\\$&");
-}
-
+/**
+ * Convert a glob pattern to a RegExp.
+ *
+ * Supports:
+ * - `**`  any path including `/`
+ * - `*`   anything except `/`
+ * - `?`   any single character except `/`
+ *
+ * `** /` at a segment boundary is treated as an optional prefix so
+ * `** /foo` matches both `foo` and `bar/foo`.
+ *
+ * Regex metacharacters in literal parts are escaped.
+ */
 export function globToRegex(pattern: string): RegExp {
   let source = "^";
 
@@ -31,6 +40,10 @@ export function globToRegex(pattern: string): RegExp {
   return new RegExp(source);
 }
 
-export function matchesGlob(path: string, patterns: readonly string[]): boolean {
-  return patterns.some((pattern) => globToRegex(pattern).test(path));
+export function matchesGlob(filepath: string, patterns: readonly string[]): boolean {
+  return patterns.some((p) => globToRegex(p).test(filepath));
+}
+
+function escapeRegex(char: string): string {
+  return char.replace(/[|\\{}()[\]^$+?.]/g, "\\$&");
 }

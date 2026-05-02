@@ -10,7 +10,8 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "ai": "latest"
+    "ai": "latest",
+    "flarbor-shared": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.7.0"

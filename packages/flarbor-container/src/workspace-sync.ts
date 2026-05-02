@@ -1,6 +1,6 @@
-import { matchesGlob } from "./glob.js";
+import { matchesGlob } from "flarbor-shared";
 import { joinSandboxPath, normalizeRelativePath, normalizeSandboxRoot } from "./paths.js";
-import type { WorkspaceLike, WorkspaceSyncOptions, WorkspaceSyncResult } from "./types.js";
+import type { WorkspaceEntry, WorkspaceLike, WorkspaceSyncOptions, WorkspaceSyncResult } from "./types.js";
 
 const DEFAULT_INCLUDE = ["**/*"] as const;
 const DEFAULT_EXCLUDE = [".git/**", "node_modules/**", ".wrangler/**"] as const;
@@ -119,7 +119,3 @@ function addEntry(
   seen.add(normalized);
 }
 
-interface WorkspaceEntry {
-  path: string;
-  type: string;
-}
