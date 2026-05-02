@@ -78,9 +78,9 @@ importers:
       flarbor-job:
         specifier: workspace:*
         version: link:../../../packages/flarbor-job
-      flarbor-shared:
+      flarbor-reward:
         specifier: workspace:*
-        version: link:../../../packages/flarbor-shared
+        version: link:../../../packages/flarbor-reward
       zod:
         specifier: latest
         version: 4.4.1

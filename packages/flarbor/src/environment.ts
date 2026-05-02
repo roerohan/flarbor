@@ -12,7 +12,8 @@ import type {
 
 import { matchesGlob } from "flarbor-shared";
 import { GitWorkspace } from "./workspace.js";
-import type { TokenUsage, EnvironmentConfig, FlarborEnv } from "./types.js";
+import type { TokenUsage } from "flarbor-shared";
+import type { EnvironmentConfig, FlarborEnv } from "./types.js";
 
 /**
  * Abstract base class for all Flarbor environments.

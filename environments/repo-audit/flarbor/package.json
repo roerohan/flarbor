@@ -16,7 +16,7 @@
     "ai": "latest",
     "flarbor": "workspace:*",
     "flarbor-job": "workspace:*",
-    "flarbor-shared": "workspace:*",
+    "flarbor-reward": "workspace:*",
     "zod": "latest"
   },
   "devDependencies": {

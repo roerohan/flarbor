@@ -1,7 +1,7 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { routeAgentRequest } from "agents";
 import { z } from "zod";
-import { FlarborEnvironment, runTask } from "flarbor";
+import { FlarborEnvironment, runTask, agentNameFor } from "flarbor";
 import type { EnvironmentConfig, FlarborEnv, TaskConfig, TrialResult, RewardResult } from "flarbor";
 import {
   run as scoreRun,
@@ -280,7 +280,7 @@ export default {
       console.log(
         `[code-change:worker] dispatching repo=${task.repoUrl} branch=${task.branch ?? "(auto)"}`,
       );
-      const name = `${task.repoUrl}:${task.branch ?? "default"}`;
+      const name = agentNameFor(task);
       const stub = env.FLARBOR_AGENT.getByName(name);
       const result = await runTask(stub, task);
       console.log(

@@ -1,4 +1,3 @@
-export { DispatchError, dispatchTask } from "flarbor-shared";
 export { emit } from "./hooks.js";
 export { agentById, jobStatus, terminal } from "./helpers.js";
 export { createJobId, createTrialConfigs, runJob } from "./job.js";
@@ -9,7 +8,6 @@ export { computeGroupStats, computeStats } from "./stats.js";
 export { runTrial } from "./trial.js";
 
 export type { Event, Hook } from "./hooks.js";
-export type { DispatchErrorKind } from "flarbor-shared";
 export type { PersistenceHook, RunJobOptions } from "./job.js";
 export type { RunQueueOptions } from "./queue.js";
 export type { RunTrialOptions } from "./trial.js";
