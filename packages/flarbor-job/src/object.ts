@@ -10,7 +10,7 @@ import type {
   TrialConfig,
   TrialRecord,
 } from "./types.js";
-import type { FetcherLike } from "flarbor-shared";
+import type { FetcherLike } from "flarbor-shared/dispatch";
 
 const JOB_RESULT_KEY = "job:result";
 

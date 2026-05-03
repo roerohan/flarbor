@@ -1,7 +1,7 @@
 import type { TaskConfig, TrialResult } from "flarbor";
-import type { FetcherLike } from "flarbor-shared";
+import type { FetcherLike } from "flarbor-shared/dispatch";
 
-export type { FetcherLike } from "flarbor-shared";
+export type { FetcherLike } from "flarbor-shared/dispatch";
 
 export type JobStatus = "pending" | "running" | "completed" | "failed" | "cancelled";
 

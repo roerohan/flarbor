@@ -1,4 +1,4 @@
-import { dispatchTask } from "flarbor-shared";
+import { dispatchTask } from "flarbor-shared/dispatch";
 import type { TrialResult } from "flarbor";
 import type {
   AgentResolver,

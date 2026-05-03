@@ -18,7 +18,6 @@ export class DispatchError extends Error {
 export interface DispatchTaskConfig {
   repoUrl: string;
   branch?: string;
-  [key: string]: unknown;
 }
 
 export interface FetcherLike {
