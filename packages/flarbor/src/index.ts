@@ -1,7 +1,7 @@
 export { FlarborEnvironment } from "./environment.js";
 export { GitWorkspace } from "./workspace.js";
 export { runTask } from "./agent-runner.js";
-export { agentNameFor } from "flarbor-shared";
+export { agentNameFor } from "flarbor-shared/dispatch";
 
 export type {
   TaskConfig,

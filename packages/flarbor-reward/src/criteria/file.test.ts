@@ -64,4 +64,14 @@ describe("file criteria", () => {
     ).resolves.toBeCloseTo(1 / 3);
     await expect(diffRatio("missing.txt", "expected").evaluate(mockContext())).resolves.toBe(0);
   });
+
+  it("uses multiset bigrams for correct Sorensen-Dice", async () => {
+    // "aaa" -> bigrams ["aa", "aa"] (count 2), "aab" -> bigrams ["aa", "ab"] (count 1 each)
+    // Multiset intersection: min(2,1) for "aa" + min(0,1) for "ab" = 1
+    // Multiset sizes: 2 + 2 = 4, score = 2*1/4 = 0.5
+    // (With Set-based dedup, both would have {"aa"} and {"aa","ab"}, giving 2*1/3 ≈ 0.667)
+    await expect(
+      diffRatio("a.txt", "aab").evaluate(mockContext({ files: { "a.txt": "aaa" } })),
+    ).resolves.toBeCloseTo(0.5);
+  });
 });

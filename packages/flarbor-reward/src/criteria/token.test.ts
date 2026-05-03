@@ -14,6 +14,8 @@ describe("token criteria", () => {
     await expect(tokenBudget(100).evaluate(mockContext({ usage: usage(150, 25) }))).resolves.toBe(0.5);
     await expect(tokenBudget(100).evaluate(mockContext({ usage: usage(200, 25) }))).resolves.toBe(0);
     await expect(tokenBudget(0).evaluate(mockContext({ usage: usage(1, 1) }))).resolves.toBe(0);
+    // Zero budget with zero tokens: "zero budget = zero tolerance"
+    await expect(tokenBudget(0).evaluate(mockContext({ usage: usage(0, 0) }))).resolves.toBe(0);
   });
 
   it("scores token efficiency from output-to-total ratio", async () => {

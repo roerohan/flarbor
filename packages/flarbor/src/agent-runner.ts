@@ -1,4 +1,4 @@
-import { dispatchTask, DispatchError, agentNameFor } from "flarbor-shared";
+import { dispatchTask, DispatchError, agentNameFor } from "flarbor-shared/dispatch";
 import type { TaskConfig, TrialResult } from "./types.js";
 
 /**

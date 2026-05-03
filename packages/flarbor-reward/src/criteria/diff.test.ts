@@ -24,6 +24,8 @@ describe("diff criteria", () => {
     await expect(
       diffSize(0).evaluate(mockContext({ filesChanged: ["a"] })),
     ).resolves.toBe(0);
+    // Zero budget with zero files: "zero budget = zero tolerance"
+    await expect(diffSize(0).evaluate(mockContext())).resolves.toBe(0);
   });
 
   it("requires changed files to match allowed glob patterns", async () => {

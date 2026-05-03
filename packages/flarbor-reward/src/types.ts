@@ -1,4 +1,5 @@
 import type { LanguageModel } from "ai";
+import type { CriterionContext } from "flarbor-shared";
 
 export type {
   TokenUsage,
