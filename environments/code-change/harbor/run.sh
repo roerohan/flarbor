@@ -1,13 +1,13 @@
 #!/bin/bash
 #
-# Run the Harbor code-change environment for latency/cost comparison with Flarbor.
+# Run the Harbor PR-replay environment for comparison with Flarbor.
 #
 # Usage:
-#   export REPO_URL="https://github.com/org/repo"
-#   export GITHUB_TOKEN="ghp_..."
-#   export INSTRUCTION="Add error handling to the fetch calls in src/api.ts"
-#   export BRANCH="harbor/add-error-handling"            # optional
-#   export MODEL_NAME="anthropic/claude-opus-4-6"  # optional
+#   export TASK_ID="zod-5855"
+#   export GITHUB_TOKEN="ghp_..."                          # optional, for push
+#   export ANTHROPIC_API_KEY="sk-ant-..."                   # required by LiteLLM
+#   export MODEL_NAME="anthropic/claude-sonnet-4-20250514"  # optional
+#   export BRANCH="harbor/zod-5855"                         # optional
 #   ./run.sh
 #
 # Prerequisites:
@@ -15,6 +15,8 @@
 #   # or: uv tool install harbor && uv pip install litellm
 #
 # This script runs the Harbor trial locally using Docker.
+# The agent looks up the task by TASK_ID from the static task suite,
+# clones the repo at the pre-PR commit, and re-implements the PR.
 
 set -euo pipefail
 
@@ -23,34 +25,55 @@ TASK_DIR="${SCRIPT_DIR}/task"
 AGENT_IMPORT="code_change_agent.agent:CodeChangeAgent"
 
 # Validate required env vars
-if [ -z "${REPO_URL:-}" ]; then
-    echo "Error: REPO_URL is required"
-    echo "Usage: REPO_URL=https://github.com/org/repo INSTRUCTION='...' ./run.sh"
+if [ -z "${TASK_ID:-}" ]; then
+    echo "Error: TASK_ID is required"
+    echo ""
+    echo "Usage: TASK_ID=zod-5855 ./run.sh"
+    echo ""
+    echo "Available tasks:"
+    PYTHONPATH="${SCRIPT_DIR}/src:${PYTHONPATH:-}" python3 -c '
+from code_change_agent.tasks import TASKS
+for tid, task in TASKS.items():
+    print(f"  {tid:20s} {task.name}")
+' 2>/dev/null || echo "  (install project to see task list: pip install -e .)"
     exit 1
 fi
 
-if [ -z "${INSTRUCTION:-}" ]; then
-    echo "Error: INSTRUCTION is required"
-    echo "Usage: REPO_URL=https://github.com/org/repo INSTRUCTION='...' ./run.sh"
+# Look up task and write instruction.md dynamically.
+# Pass TASK_ID and SCRIPT_DIR via environment (not shell interpolation)
+# to avoid injection if they contain quotes or special characters.
+TASK_INSTRUCTIONS=$(PYTHONPATH="${SCRIPT_DIR}/src:${PYTHONPATH:-}" python3 -c '
+import os, sys
+from code_change_agent.tasks import get_task
+task_id = os.environ["TASK_ID"]
+task = get_task(task_id)
+if task is None:
+    print(f"ERROR: Unknown task ID: {task_id}", file=sys.stderr)
+    sys.exit(1)
+print(task.instructions)
+') || {
+    echo "Error: Failed to look up task '${TASK_ID}'"
+    echo "Make sure the project is installed: pip install -e ."
     exit 1
-fi
+}
 
-# Write the instruction to instruction.md so Harbor reads it and passes
-# the content to agent.run(instruction, ...).
-printf '%s\n' "$INSTRUCTION" > "${TASK_DIR}/instruction.md"
+# Write task instructions so Harbor passes them to agent.run(instruction, ...)
+printf '%s\n' "$TASK_INSTRUCTIONS" > "${TASK_DIR}/instruction.md"
 
 # Default model
-MODEL_NAME="${MODEL_NAME:-anthropic/claude-opus-4-6}"
+MODEL_NAME="${MODEL_NAME:-anthropic/claude-sonnet-4-20250514}"
 
-echo "=== Harbor Code Change Agent ==="
-echo "Repo:        ${REPO_URL}"
+echo "=== Harbor PR-Replay Agent ==="
+echo "Task:        ${TASK_ID}"
 echo "Branch:      ${BRANCH:-auto-generated}"
 echo "Model:       ${MODEL_NAME}"
-echo "Instruction: ${INSTRUCTION:0:100}..."
 echo "================================="
 
 # Record start time for latency comparison
 START_TIME=$(python3 -c "import time; print(time.time())")
+
+# Ensure the agent package is importable
+export PYTHONPATH="${SCRIPT_DIR}/src:${PYTHONPATH:-}"
 
 # Run via Harbor CLI
 harbor run \

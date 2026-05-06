@@ -1,3 +1,4 @@
-Make code changes to the repository according to the instructions provided via the REPO_URL and task-specific instruction environment variables.
+This file is overwritten at runtime by run.sh with the task-specific instructions.
 
-The agent will clone the repository, apply the requested changes using LLM-driven tool calls, and push the result to a new branch.
+The agent reads the task definition from TASK_ID and uses those instructions directly.
+This placeholder exists only because Harbor requires an instruction.md file to be present.

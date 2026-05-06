@@ -2,17 +2,17 @@ schema_version = "1.1"
 
 [task]
 name = "flarbor/code-change-harbor"
-description = "Clone a repo, make LLM-driven code changes, push to a new branch. Harbor equivalent of Flarbor's code-change environment."
+description = "PR-replay benchmark: clone a repo at a pre-PR commit, re-implement the PR via LLM-driven code changes, then verify against the known-good diff. Harbor equivalent of Flarbor's code-change environment."
 authors = [{ name = "Flarbor", email = "dev@flarbor.dev" }]
-keywords = ["code-change", "llm", "git", "comparison"]
+keywords = ["pr-replay", "code-change", "llm", "git", "benchmark"]
 
 [metadata]
-difficulty_explanation = "Depends on the task instructions provided at runtime"
+difficulty_explanation = "Depends on the PR being replayed (set via TASK_ID)"
 category = "code-modification"
 flarbor_equivalent = "environments/code-change/flarbor"
 
 [verifier]
-timeout_sec = 30.0
+timeout_sec = 300.0
 
 [agent]
 timeout_sec = 600.0
@@ -25,6 +25,7 @@ storage_mb = 10240
 gpus = 0
 allow_internet = true
 # Runtime env vars — set these when running `harbor run`
-# REPO_URL, GITHUB_TOKEN, BRANCH, AUTHOR_NAME, AUTHOR_EMAIL, MAX_STEPS
-# are read by the agent from the host environment and passed through.
-env = { REPO_URL = "${REPO_URL}", GITHUB_TOKEN = "${GITHUB_TOKEN}", BRANCH = "${BRANCH}", AUTHOR_NAME = "${AUTHOR_NAME}", AUTHOR_EMAIL = "${AUTHOR_EMAIL}", MAX_STEPS = "${MAX_STEPS}" }
+# TASK_ID is required; others are optional.
+# GITHUB_TOKEN is intentionally NOT passed into the container env —
+# it is only needed by the host-side run.sh for clone/push.
+env = { TASK_ID = "${TASK_ID}", BRANCH = "${BRANCH}", AUTHOR_NAME = "${AUTHOR_NAME}", AUTHOR_EMAIL = "${AUTHOR_EMAIL}", MAX_STEPS = "${MAX_STEPS}" }

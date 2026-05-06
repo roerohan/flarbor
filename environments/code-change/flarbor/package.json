@@ -2,7 +2,7 @@
   "name": "code-change-flarbor",
   "version": "0.0.1",
   "private": true,
-  "description": "Flarbor environment: clone a repo, make LLM-driven changes, push to a new branch",
+  "description": "Flarbor PR-replay environment: replay real PRs and verify agent implementations",
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
@@ -17,6 +17,8 @@
     "ai": "latest",
     "flarbor": "workspace:*",
     "flarbor-reward": "workspace:*",
+    "flarbor-shared": "workspace:*",
+    "flarbor-verify": "workspace:*",
     "zod": "latest"
   },
   "devDependencies": {
