@@ -1,23 +1,26 @@
 """
-CodeChangeAgent — Harbor equivalent of Flarbor's code-change-agent.
+CodeChangeAgent — Harbor equivalent of Flarbor's PR-replay environment.
 
 Workflow:
-  1. Clone a repo into the container
-  2. Create a new branch
-  3. Run an LLM-driven agentic loop that reads/writes files via exec()
-  4. Commit changes and push to the remote
+  1. Look up a PRReplayTask by TASK_ID
+  2. Clone the repo (full history) and check out the base commit
+  3. Create a new branch from the base commit
+  4. Run an LLM-driven agentic loop that reads/writes files via exec()
+  5. Commit changes and push to the remote
+  6. Write changed-file metadata for the verifier (test.sh) to score
 
-The agent uses LiteLLM for model inference (matching Flarbor's use of
-Anthropic claude-opus-4-6 via @ai-sdk/anthropic). It implements its own
+The agent uses LiteLLM for model inference. It implements its own
 tool-calling loop: the LLM receives tool definitions (read_file,
 write_file, edit_file, delete_file, find_files, grep_files, list_dir,
 execute_command), calls them via tool_calls, and the agent executes
 each tool inside the Docker container via environment.exec().
 
 Environment variables required:
-  REPO_URL        — Repository URL to clone
-  BRANCH          — Branch name to create (optional, auto-generated if omitted)
-  GITHUB_TOKEN    — GitHub token for clone/push authentication
+  TASK_ID         — PR-replay task identifier (e.g. "zod-5855")
+
+Environment variables optional:
+  GITHUB_TOKEN    — GitHub token for clone/push (omit to skip push)
+  BRANCH          — Branch name to create (auto-generated if omitted)
   AUTHOR_NAME     — Git author name (default: "Harbor Agent")
   AUTHOR_EMAIL    — Git author email (default: "agent@harbor.dev")
   MAX_STEPS       — Maximum agentic loop steps (default: 30)
@@ -33,7 +36,6 @@ import logging
 import os
 import shlex
 import time
-from pathlib import Path
 from typing import Any
 
 import litellm
@@ -41,10 +43,21 @@ from harbor.agents.base import BaseAgent
 from harbor.environments.base import BaseEnvironment
 from harbor.models.agent.context import AgentContext
 
+from code_change_agent.tasks import TASKS, get_task, PRReplayTask
+
 # Silence litellm's noisy logging
 litellm.suppress_debug_info = True
 
 logger = logging.getLogger(__name__)
+
+
+def _redact_token(text: str) -> str:
+    """Strip any embedded GitHub token from error messages / log output."""
+    token = os.environ.get("GITHUB_TOKEN", "")
+    if token and token in text:
+        return text.replace(token, "***")
+    return text
+
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -55,7 +68,7 @@ WORKDIR = "/home/agent/repo"
 
 # Protected path patterns — matches Flarbor's protectedPaths config exactly.
 # Uses glob syntax: * matches anything except /, ** matches everything.
-PROTECTED_PATTERNS = [".git/**", ".github/workflows/**"]
+PROTECTED_PATTERNS = [".git", ".git/**", ".github/workflows", ".github/workflows/**"]
 
 # ---------------------------------------------------------------------------
 # Tool definitions (OpenAI function-calling format)
@@ -226,10 +239,17 @@ TOOLS: list[dict[str, Any]] = [
 
 SYSTEM_PROMPT = f"""\
 You are a code modification agent. You have access to a cloned git repository at {WORKDIR}.
+A bug has been reported. Your job is to fix it and add tests.
+
 Use the provided tools (read_file, write_file, edit_file, delete_file, find_files, grep_files, list_dir, execute_command) to understand the codebase and make the requested changes.
 Use the execute_command tool to run shell commands when you need to process multiple files or do complex operations.
-Be precise and make only the changes requested. Do not modify files unnecessarily.
-When you are done, summarize what you changed and why.\
+
+Guidelines:
+- Read the existing code to understand patterns before writing.
+- Make minimal, targeted changes — only modify what's needed.
+- Add tests that cover the fix.
+- Do not modify files unnecessarily.
+- When you are done, summarize what you changed and why.\
 """
 
 
@@ -274,9 +294,9 @@ def _matches_protected_path(filepath: str) -> bool:
 
 class CodeChangeAgent(BaseAgent):
     """
-    Harbor agent that clones a repo, uses an LLM to make code changes
-    via tool calls, then commits and pushes.  Mirrors the Flarbor
-    code-change-agent's workflow exactly.
+    Harbor agent that replays a PR: clones a repo at a pre-PR commit,
+    uses an LLM to re-implement the changes via tool calls, then commits
+    and pushes.  Mirrors the Flarbor code-change environment's workflow.
     """
 
     SUPPORTS_ATIF: bool = False
@@ -294,55 +314,141 @@ class CodeChangeAgent(BaseAgent):
 
     async def run(
         self,
-        instruction: str,
+        _instruction: str,
         environment: BaseEnvironment,
         context: AgentContext,
     ) -> None:
         """
-        Execute the code-change workflow:
-        1. Clone the repository
-        2. Create a branch
-        3. Run the agentic loop (LLM + tool calls)
-        4. Commit and push
+        Execute the PR-replay workflow:
+        1. Resolve task from TASK_ID
+        2. Clone the repository (full history) at the base commit
+        3. Create a branch from the base commit
+        4. Run the agentic loop (LLM + tool calls)
+        5. Commit and push
+        6. Write changed-file metadata for the verifier
         """
-        repo_url = os.environ.get("REPO_URL", "")
+        # --- Resolve task ---
+        task_id = os.environ.get("TASK_ID", "")
+        if not task_id:
+            raise ValueError(
+                "TASK_ID environment variable is required. "
+                f"Available tasks: {', '.join(TASKS.keys())}"
+            )
+
+        task = get_task(task_id)
+        if task is None:
+            raise ValueError(
+                f"Unknown task ID: \"{task_id}\". "
+                f"Available: {', '.join(TASKS.keys())}"
+            )
+
         github_token = os.environ.get("GITHUB_TOKEN", "")
-        branch = os.environ.get("BRANCH", "") or f"harbor/{int(time.time()):x}"
+        branch = os.environ.get("BRANCH", "") or f"harbor/{task.id}-{int(time.time()):x}"
         author_name = os.environ.get("AUTHOR_NAME", "Harbor Agent")
         author_email = os.environ.get("AUTHOR_EMAIL", "agent@harbor.dev")
-        max_steps = int(os.environ.get("MAX_STEPS", "30"))
+        max_steps_raw = os.environ.get("MAX_STEPS") or "30"
+        try:
+            max_steps = int(max_steps_raw)
+        except ValueError:
+            raise ValueError(
+                f"MAX_STEPS must be a positive integer, got \"{max_steps_raw}\""
+            ) from None
+        if max_steps <= 0:
+            raise ValueError(
+                f"MAX_STEPS must be a positive integer, got {max_steps}"
+            )
         model_name = self.model_name or os.environ.get(
-            "MODEL_NAME", "anthropic/claude-opus-4-6"
+            "MODEL_NAME", "anthropic/claude-sonnet-4-20250514"
         )
 
-        if not repo_url:
-            raise ValueError("REPO_URL environment variable is required")
-
         logger.info(
-            "[code-change-agent-harbor] Starting task: repo=%s branch=%s",
-            repo_url,
+            "[code-change-agent-harbor] Starting PR-replay: task=%s repo=%s base=%s branch=%s",
+            task.id,
+            task.repo_url,
+            task.base_commit[:8],
             branch,
         )
 
-        # --- Step 1: Clone the repository ---
-        logger.info("[code-change-agent-harbor] Step 1: Cloning repository...")
-        clone_url = repo_url
+        # Wrap the main execution in try/except so we always write a result log,
+        # even on unexpected failures (clone, LLM, commit, push).
+        try:
+            await self._run_pr_replay(
+                task, environment, context,
+                github_token=github_token,
+                branch=branch,
+                author_name=author_name,
+                author_email=author_email,
+                max_steps=max_steps,
+                model_name=model_name,
+            )
+        except Exception as exc:
+            logger.error(
+                "[code-change-agent-harbor] Unhandled error: %s", exc, exc_info=True
+            )
+            self._write_result_log(
+                task=task,
+                success=False,
+                branch=branch,
+                commit_sha="",
+                files_changed=[],
+                error=str(exc),
+                input_tokens=context.n_input_tokens or 0,
+                output_tokens=context.n_output_tokens or 0,
+            )
+            raise
+
+    async def _run_pr_replay(
+        self,
+        task: PRReplayTask,
+        environment: BaseEnvironment,
+        context: AgentContext,
+        *,
+        github_token: str,
+        branch: str,
+        author_name: str,
+        author_email: str,
+        max_steps: int,
+        model_name: str,
+    ) -> None:
+        """Inner execution body — separated so the caller can catch and log failures."""
+
+        # --- Step 1: Clone the repository (full history) ---
+        logger.info("[code-change-agent-harbor] Step 1: Cloning repository (full history)...")
+        clone_url = task.repo_url
         if github_token:
-            # Insert token into HTTPS URL for authentication.
-            clone_url = repo_url.replace(
+            clone_url = task.repo_url.replace(
                 "https://", f"https://x-access-token:{github_token}@"
             )
         result = await environment.exec(
-            command=f"git clone --depth 1 {shlex.quote(clone_url)} {WORKDIR}",
-            timeout_sec=120,
+            command=f"git clone {shlex.quote(clone_url)} {WORKDIR}",
+            timeout_sec=300,
         )
         if result.return_code != 0:
             raise RuntimeError(
-                f"git clone failed: {result.stderr or result.stdout}"
+                f"git clone failed: {_redact_token(result.stderr or result.stdout)}"
+            )
+        # Strip token from stored origin URL immediately after clone.
+        if github_token:
+            await environment.exec(
+                command=f"git remote set-url origin {shlex.quote(task.repo_url)}",
+                cwd=WORKDIR,
             )
         logger.info("[code-change-agent-harbor] Step 1: Clone complete")
 
-        # --- Step 2: Create the branch ---
+        # --- Step 2: Checkout base commit and create branch ---
+        logger.info(
+            "[code-change-agent-harbor] Step 2: Checking out base commit %s",
+            task.base_commit[:8],
+        )
+        result = await environment.exec(
+            command=f"git checkout {shlex.quote(task.base_commit)}",
+            cwd=WORKDIR,
+        )
+        if result.return_code != 0:
+            raise RuntimeError(
+                f"git checkout base commit failed: {result.stderr or result.stdout}"
+            )
+
         logger.info(
             "[code-change-agent-harbor] Step 2: Creating branch: %s", branch
         )
@@ -354,16 +460,17 @@ class CodeChangeAgent(BaseAgent):
             raise RuntimeError(
                 f"git checkout -b failed: {result.stderr or result.stdout}"
             )
-        logger.info("[code-change-agent-harbor] Step 2: Branch created")
+        logger.info("[code-change-agent-harbor] Step 2: Branch created from base commit")
 
         # --- Step 3: Agentic loop ---
+        # Use task instructions (from PR title + body), not the Harbor instruction.md.
         logger.info("[code-change-agent-harbor] Step 3: Running agentic loop...")
         total_input_tokens = 0
         total_output_tokens = 0
 
         messages: list[dict[str, Any]] = [
             {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": instruction},
+            {"role": "user", "content": task.instructions},
         ]
 
         for step in range(max_steps):
@@ -373,7 +480,7 @@ class CodeChangeAgent(BaseAgent):
                 max_steps,
             )
 
-            response = litellm.completion(
+            response = await litellm.acompletion(
                 model=model_name,
                 messages=messages,
                 tools=TOOLS,
@@ -463,6 +570,7 @@ class CodeChangeAgent(BaseAgent):
                 "[code-change-agent-harbor] Agent made no changes to the repository"
             )
             self._write_result_log(
+                task=task,
                 success=False,
                 branch=branch,
                 commit_sha="",
@@ -479,7 +587,7 @@ class CodeChangeAgent(BaseAgent):
         logger.info(
             "[code-change-agent-harbor] Step 5: Committing and pushing..."
         )
-        commit_message = f"harbor: {instruction[:72]}"
+        commit_message = f"harbor: {task.name}"
 
         # Configure git user
         await environment.exec(
@@ -494,7 +602,7 @@ class CodeChangeAgent(BaseAgent):
         # Stage all changes
         await environment.exec(command="git add -A", cwd=WORKDIR)
 
-        # Commit (use shlex.quote to avoid shell injection from instruction text)
+        # Commit
         result = await environment.exec(
             command=f"git commit -m {shlex.quote(commit_message)}",
             cwd=WORKDIR,
@@ -512,39 +620,41 @@ class CodeChangeAgent(BaseAgent):
         commit_sha = (sha_result.stdout or "").strip()
 
         # Push if we have a token.
-        # Use git credential helper via env var to avoid leaking the token
-        # in process args or log output.
         if github_token:
-            push_url = repo_url.replace(
+            push_url = task.repo_url.replace(
                 "https://", f"https://x-access-token:{github_token}@"
             )
-            # Set the remote URL (with embedded token) temporarily, push,
-            # then reset it.  This keeps the token out of the command line
-            # visible in `ps` output (it's only in the git config which is
-            # local to the container).
             await environment.exec(
                 command=f"git remote set-url origin {shlex.quote(push_url)}",
                 cwd=WORKDIR,
             )
-            result = await environment.exec(
-                command=f"git push origin {shlex.quote(branch)}",
-                cwd=WORKDIR,
-                timeout_sec=120,
-            )
-            # Reset remote URL to the original (strip token)
-            await environment.exec(
-                command=f"git remote set-url origin {shlex.quote(repo_url)}",
-                cwd=WORKDIR,
-            )
+            try:
+                result = await environment.exec(
+                    command=f"git push origin {shlex.quote(branch)}",
+                    cwd=WORKDIR,
+                    timeout_sec=120,
+                )
+            finally:
+                # Always reset remote URL to strip token, even on exception.
+                await environment.exec(
+                    command=f"git remote set-url origin {shlex.quote(task.repo_url)}",
+                    cwd=WORKDIR,
+                )
             if result.return_code != 0:
                 raise RuntimeError(
-                    f"git push failed: {result.stderr or result.stdout}"
+                    f"git push failed: {_redact_token(result.stderr or result.stdout)}"
                 )
 
-        logger.info(
-            "[code-change-agent-harbor] Step 5: Push complete, commitSha=%s",
-            commit_sha,
-        )
+        if github_token:
+            logger.info(
+                "[code-change-agent-harbor] Step 5: Push complete, commitSha=%s",
+                commit_sha,
+            )
+        else:
+            logger.info(
+                "[code-change-agent-harbor] Step 5: Commit complete (push skipped, no GITHUB_TOKEN), commitSha=%s",
+                commit_sha,
+            )
 
         # Populate context with results
         context.n_input_tokens = total_input_tokens
@@ -553,10 +663,12 @@ class CodeChangeAgent(BaseAgent):
             "branch": branch,
             "commit_sha": commit_sha,
             "files_changed": changed_files,
+            "task_id": task.id,
         }
 
-        # Write result log
+        # Write result log + changed-file metadata for verifier
         self._write_result_log(
+            task=task,
             success=True,
             branch=branch,
             commit_sha=commit_sha,
@@ -607,7 +719,7 @@ class CodeChangeAgent(BaseAgent):
         )
         if result.return_code != 0:
             return f"Error reading {path}: {result.stderr or 'file not found'}"
-        return result.stdout or ""
+        return result.stdout or "(empty file)"
 
     async def _tool_write_file(
         self, args: dict[str, Any], env: BaseEnvironment
@@ -727,7 +839,7 @@ class CodeChangeAgent(BaseAgent):
         result = await env.exec(
             command=(
                 f"grep -rn {include_flag} "
-                f"{shlex.quote(pattern)} "
+                f"-- {shlex.quote(pattern)} "
                 f"{shlex.quote(search_path)} "
                 "2>/dev/null | head -200"
             ),
@@ -747,7 +859,7 @@ class CodeChangeAgent(BaseAgent):
         )
         if result.return_code != 0:
             return f"Error listing {path}: {result.stderr or 'directory not found'}"
-        return result.stdout or ""
+        return result.stdout or "(empty directory)"
 
     async def _tool_execute_command(
         self, args: dict[str, Any], env: BaseEnvironment
@@ -768,6 +880,7 @@ class CodeChangeAgent(BaseAgent):
 
     def _write_result_log(
         self,
+        task: PRReplayTask,
         success: bool,
         branch: str,
         commit_sha: str,
@@ -777,6 +890,8 @@ class CodeChangeAgent(BaseAgent):
         output_tokens: int = 0,
     ) -> None:
         """Write a JSON result log to the logs directory (mirrors Flarbor's TrialResult)."""
+        self.logs_dir.mkdir(parents=True, exist_ok=True)
+
         result: dict[str, Any] = {
             "success": success,
             "branch": branch,
@@ -787,9 +902,24 @@ class CodeChangeAgent(BaseAgent):
                 "outputTokens": output_tokens,
                 "totalTokens": input_tokens + output_tokens,
             },
+            "metadata": {
+                "taskId": task.id,
+                "prNumber": task.pr_number,
+                "baseCommit": task.base_commit,
+            },
         }
         if error:
             result["error"] = error
 
         log_path = self.logs_dir / "trial_result.json"
         log_path.write_text(json.dumps(result, indent=2))
+
+        # Write changed-file metadata for the verifier to read.
+        # The verifier needs the task ID and changed files to score.
+        verifier_meta = {
+            "taskId": task.id,
+            "filesChanged": files_changed,
+            "success": success,
+        }
+        verifier_path = self.logs_dir / "verifier_metadata.json"
+        verifier_path.write_text(json.dumps(verifier_meta, indent=2))

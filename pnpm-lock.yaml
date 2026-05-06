@@ -44,6 +44,12 @@ importers:
       flarbor-reward:
         specifier: workspace:*
         version: link:../../../packages/flarbor-reward
+      flarbor-shared:
+        specifier: workspace:*
+        version: link:../../../packages/flarbor-shared
+      flarbor-verify:
+        specifier: workspace:*
+        version: link:../../../packages/flarbor-verify
       zod:
         specifier: latest
         version: 4.3.6

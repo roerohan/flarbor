@@ -7,6 +7,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
+# Install Node.js 22 (LTS) and pnpm — required for running zod tests in the verifier
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/* \
+    && npm install -g pnpm@9
+
 # Configure git defaults
 RUN git config --global init.defaultBranch main \
     && git config --global advice.detachedHead false
@@ -18,6 +24,6 @@ RUN useradd -m -s /bin/bash agent
 RUN mkdir -p /logs/agent /logs/verifier \
     && chown -R agent:agent /logs
 
-# Let the agent own /home/agent where clone will happen if /app fails
+# Let the agent own /home/agent where clone will happen
 USER agent
 WORKDIR /home/agent
