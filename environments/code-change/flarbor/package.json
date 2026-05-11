@@ -11,11 +11,13 @@
   "dependencies": {
     "@ai-sdk/anthropic": "latest",
     "@cloudflare/codemode": "latest",
+    "@cloudflare/sandbox": "latest",
     "@cloudflare/shell": "latest",
     "@cloudflare/think": "latest",
     "agents": "latest",
     "ai": "latest",
     "flarbor": "workspace:*",
+    "flarbor-container": "workspace:*",
     "flarbor-reward": "workspace:*",
     "flarbor-shared": "workspace:*",
     "flarbor-verify": "workspace:*",

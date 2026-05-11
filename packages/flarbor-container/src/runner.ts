@@ -47,7 +47,6 @@ export class ContainerRunner {
         ? this.config.sandboxId(context)
         : this.config.sandboxId;
     const sandbox = getSandbox(this.config.sandbox, sandboxId, {
-      normalizeId: true,
       keepAlive: this.config.keepAlive,
       sleepAfter: this.config.sleepAfter,
     });

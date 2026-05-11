@@ -77,7 +77,6 @@ describe("ContainerRunner", () => {
       files: [{ path: "reports/result.txt", content: "captured" }],
     });
     expect(getSandbox).toHaveBeenCalledWith(runnerConfig.sandbox, "npm test:packages/app", {
-      normalizeId: true,
       keepAlive: undefined,
       sleepAfter: undefined,
     });
