@@ -60,7 +60,6 @@ export function createSandboxExec(config: SandboxExecConfig): VerifyExec {
     sandboxPromise ??= (async () => {
       const { getSandbox } = await import("@cloudflare/sandbox");
       return getSandbox(config.sandbox, config.sandboxId, {
-        normalizeId: true,
         keepAlive: config.keepAlive,
         sleepAfter: config.sleepAfter,
       });

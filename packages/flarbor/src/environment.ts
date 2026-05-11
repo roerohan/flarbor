@@ -33,6 +33,7 @@ export abstract class FlarborEnvironment<Env extends FlarborEnv = FlarborEnv> ex
   override workspace = new Workspace({
     sql: this.ctx.storage.sql,
     name: () => this.ctx.id.toString(),
+    r2: this.env.WORKSPACE_BUCKET,
   });
 
   private _gitWorkspace: GitWorkspace | null = null;
@@ -116,6 +117,18 @@ export abstract class FlarborEnvironment<Env extends FlarborEnv = FlarborEnv> ex
   }
 
   override beforeToolCall(ctx: ToolCallContext): ToolCallDecision | void {
+    if (ctx.toolName === "shell") {
+      const input = ctx.input;
+      if (input !== null && typeof input === "object") {
+        const command = Reflect.get(input, "command");
+        const cwd = Reflect.get(input, "cwd");
+        console.log(
+          `[flarbor] shell_command command=${typeof command === "string" ? JSON.stringify(command) : "<missing>"}` +
+            ` cwd=${typeof cwd === "string" ? JSON.stringify(cwd) : "<repo-root>"}`,
+        );
+      }
+    }
+
     const protectedPaths = this.envConfig.protectedPaths;
     if (!protectedPaths || protectedPaths.length === 0) return;
 

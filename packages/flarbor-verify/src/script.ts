@@ -48,7 +48,7 @@ export async function verifyScript(config: VerifyScriptConfig): Promise<VerifyRe
   const os = config.os ?? "linux";
   const maxOutputBytes = config.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES;
   const { getSandbox } = await import("@cloudflare/sandbox");
-  const sandbox = getSandbox(config.sandbox, config.sandboxId, { normalizeId: true });
+  const sandbox = getSandbox(config.sandbox, config.sandboxId);
 
   let command: ScriptCommandResult | undefined;
 

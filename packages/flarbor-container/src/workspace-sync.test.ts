@@ -28,6 +28,25 @@ describe("listIncludedFiles", () => {
     ]);
   });
 
+  it("normalizes absolute-style workspace glob paths", async () => {
+    const workspace = new FakeWorkspace({
+      globResults: new Map([
+        [
+          "**/*",
+          [
+            { path: "/.configs/rollup.config.js", type: "file" },
+            { path: "/src/index.ts", type: "file" },
+          ],
+        ],
+      ]),
+    });
+
+    await expect(listIncludedFiles(workspace, ["**/*"], [])).resolves.toEqual([
+      ".configs/rollup.config.js",
+      "src/index.ts",
+    ]);
+  });
+
   it("falls back to recursive directory listing when glob is unavailable", async () => {
     const dirs = new Map<string, readonly WorkspaceEntry[]>([
       [
@@ -126,6 +145,34 @@ describe("syncWorkspaceToSandbox", () => {
       { path: "/workspace/custom/src/index.ts", content: "source", options: undefined },
     ]);
   });
+
+  it("creates nested target directories once when the sandbox supports exec", async () => {
+    const workspace = new FakeWorkspace({
+      globResults: new Map([
+        [
+          "**/*",
+          [
+            { path: "src/index.ts", type: "file" },
+            { path: "src/util.ts", type: "file" },
+          ],
+        ],
+      ]),
+      textFiles: new Map([
+        ["src/index.ts", "index"],
+        ["src/util.ts", "util"],
+      ]),
+    });
+    const sandbox = new FakeSandboxWriter();
+
+    await syncWorkspaceToSandbox(workspace, sandbox);
+
+    expect(sandbox.execCalls).toEqual([
+      {
+        command: "mkdir -p '/workspace/repo/src'",
+        options: { timeout: 30_000, origin: "internal" },
+      },
+    ]);
+  });
 });
 
 class FakeWorkspace implements WorkspaceLike {
@@ -164,11 +211,19 @@ class FakeWorkspace implements WorkspaceLike {
 }
 
 class FakeSandboxWriter {
+  readonly execCalls: Array<{
+    command: string;
+    options: { timeout?: number; origin?: string } | undefined;
+  }> = [];
   readonly writes: Array<{
     path: string;
     content: string;
     options: { encoding?: string } | undefined;
   }> = [];
+
+  async exec(command: string, options?: { timeout?: number; origin?: string }): Promise<void> {
+    this.execCalls.push({ command, options });
+  }
 
   async writeFile(path: string, content: string, options?: { encoding?: string }): Promise<void> {
     this.writes.push({ path, content, options });

@@ -43,6 +43,7 @@ export interface EnvironmentConfig {
 export interface FlarborEnv {
   AI?: Ai;
   LOADER?: WorkerLoader;
+  WORKSPACE_BUCKET?: R2Bucket;
   GITHUB_TOKEN?: string;
   ANTHROPIC_API_KEY?: string;
 }

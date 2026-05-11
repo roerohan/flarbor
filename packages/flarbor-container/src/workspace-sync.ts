@@ -1,11 +1,17 @@
 import { matchesGlob } from "flarbor-shared";
 import { joinSandboxPath, normalizeRelativePath, normalizeSandboxRoot } from "./paths.js";
-import type { WorkspaceEntry, WorkspaceLike, WorkspaceSyncOptions, WorkspaceSyncResult } from "./types.js";
+import type {
+  WorkspaceEntry,
+  WorkspaceLike,
+  WorkspaceSyncOptions,
+  WorkspaceSyncResult,
+} from "./types.js";
 
 const DEFAULT_INCLUDE = ["**/*"] as const;
 const DEFAULT_EXCLUDE = [".git/**", "node_modules/**", ".wrangler/**"] as const;
 
 interface SandboxFileWriter {
+  exec?(command: string, options?: { timeout?: number; origin?: string }): Promise<unknown>;
   writeFile(path: string, content: string, options?: { encoding?: string }): Promise<unknown>;
 }
 
@@ -18,6 +24,7 @@ export async function syncWorkspaceToSandbox(
   const include = options.include ?? DEFAULT_INCLUDE;
   const exclude = [...DEFAULT_EXCLUDE, ...(options.exclude ?? [])];
   const paths = await listIncludedFiles(workspace, include, exclude);
+  const createdDirs = new Set<string>([targetDir]);
   let filesWritten = 0;
   let filesSkipped = 0;
   let bytesWritten = 0;
@@ -29,12 +36,33 @@ export async function syncWorkspaceToSandbox(
       continue;
     }
 
-    await sandbox.writeFile(joinSandboxPath(targetDir, path), file.content, file.options);
+    const targetPath = joinSandboxPath(targetDir, path);
+    await ensureParentDirectory(sandbox, targetPath, createdDirs);
+    await sandbox.writeFile(targetPath, file.content, file.options);
     filesWritten++;
     bytesWritten += file.bytes;
   }
 
   return { filesWritten, filesSkipped, bytesWritten };
+}
+
+async function ensureParentDirectory(
+  sandbox: SandboxFileWriter,
+  targetPath: string,
+  createdDirs: Set<string>,
+): Promise<void> {
+  const lastSlash = targetPath.lastIndexOf("/");
+  if (lastSlash <= 0) return;
+  const parent = targetPath.slice(0, lastSlash);
+  if (createdDirs.has(parent)) return;
+  if (sandbox.exec) {
+    await sandbox.exec(`mkdir -p ${shellQuote(parent)}`, { timeout: 30_000, origin: "internal" });
+  }
+  createdDirs.add(parent);
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
 async function readWorkspaceFile(
@@ -113,9 +141,12 @@ function addEntry(
   exclude: readonly string[],
 ): void {
   if (type !== "file") return;
-  const normalized = normalizeRelativePath(path);
+  const normalized = normalizeRelativePath(normalizeWorkspaceEntryPath(path));
   if (!matchesGlob(normalized, include)) return;
   if (matchesGlob(normalized, exclude)) return;
   seen.add(normalized);
 }
 
+function normalizeWorkspaceEntryPath(path: string): string {
+  return path.replaceAll("\\", "/").replace(/^\/+/, "");
+}

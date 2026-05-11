@@ -6,7 +6,7 @@
  *   2. Clone the repo at the base commit (before the PR)
  *   3. Give the agent the PR description as instructions
  *   4. Agent modifies code
- *   5. Verify using flarbor-verify (tests, file patterns, file touch, LLM judge)
+ *   5. Verify using flarbor-verify (tests, file patterns, file touch, judge fallback)
  *   6. Return TrialResult with reward scores
  */
 
@@ -14,10 +14,14 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { routeAgentRequest } from "agents";
 import { z } from "zod";
 import { FlarborEnvironment, runTask, agentNameFor } from "flarbor";
+import { createContainerCommandTool } from "flarbor-container";
 import type { EnvironmentConfig, FlarborEnv, TrialResult } from "flarbor";
 import type { RewardResult } from "flarbor-shared";
+import type { SandboxNamespace } from "flarbor-verify";
 import { TASKS, getTask, type PRReplayTask } from "./tasks.js";
 import { verifyPRReplay, REFERENCE_DIFFS } from "./verifier.js";
+
+export { Sandbox } from "@cloudflare/sandbox";
 
 // ---------------------------------------------------------------------------
 // Env bindings
@@ -25,10 +29,20 @@ import { verifyPRReplay, REFERENCE_DIFFS } from "./verifier.js";
 
 interface Env extends FlarborEnv {
   FLARBOR_AGENT: DurableObjectNamespace;
+  Sandbox: SandboxNamespace;
   /** Default task ID if not provided in POST body. */
   TASK_ID?: string;
   MAX_STEPS?: string;
 }
+
+const AGENT_ALLOWED_COMMANDS = [
+  /^pnpm install(?: --frozen-lockfile)?$/,
+  /^pnpm (?:exec )?vitest run(?: [A-Za-z0-9_./:=@+-]+)*$/,
+  /^npx vitest run(?: [A-Za-z0-9_./:=@+-]+)*$/,
+  /^pnpm (?:run )?(?:build|test)(?: (?:-- )?[A-Za-z0-9_./:=@+-]+)*$/,
+  /^npm (?:run )?(?:build|test)(?: (?:-- )?[A-Za-z0-9_./:=@+-]+)*$/,
+  /^node(?: --loader [A-Za-z0-9_./:@+-]+)? [A-Za-z0-9_./-]+\.(?:js|mjs|cjs|ts)$/,
+] as const;
 
 // ---------------------------------------------------------------------------
 // Input validation
@@ -89,6 +103,32 @@ function toReward(result: {
   return result;
 }
 
+function sandboxIdFor(prefix: string, parts: readonly string[]): string {
+  const seed = parts.join("-");
+  const prefixPart = toSandboxIdPart(prefix).slice(0, 24) || "sandbox";
+  const hash = stableHash(seed);
+  const maxSlugLength = 63 - prefixPart.length - hash.length - 2;
+  const slug = toSandboxIdPart(seed).slice(0, Math.max(0, maxSlugLength));
+  return slug ? `${prefixPart}-${slug}-${hash}` : `${prefixPart}-${hash}`;
+}
+
+function toSandboxIdPart(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .replace(/-+/g, "-");
+}
+
+function stableHash(value: string): string {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < value.length; index++) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(36).padStart(7, "0");
+}
+
 // ---------------------------------------------------------------------------
 // Task list response (shared by Worker and DO)
 // ---------------------------------------------------------------------------
@@ -114,6 +154,7 @@ export class FlarborAgent extends FlarborEnvironment<Env> {
         "",
         "Use the workspace tools (read, write, edit, find, grep, list) to understand the codebase and make the requested changes.",
         "Use the execute tool to run JavaScript code when you need to process multiple files or do complex operations.",
+        "Use the shell tool only for allowlisted build/test commands. Pass cwd separately instead of using cd, and pass environment variables through env instead of shell syntax. It syncs workspace files into a container, but container-side file edits are not copied back; make code changes with workspace tools.",
         "",
         "Guidelines:",
         "- Read the existing code to understand patterns before writing.",
@@ -135,6 +176,17 @@ export class FlarborAgent extends FlarborEnvironment<Env> {
             maxTokens: 2000,
           })
           .withCachedPrompt(),
+
+      tools: {
+        shell: createContainerCommandTool({
+          sandbox: this.env.Sandbox,
+          workspace: this.workspace,
+          sandboxId: sandboxIdFor("agent", [this.ctx.id.toString()]),
+          allowedCommands: AGENT_ALLOWED_COMMANDS,
+          defaultTimeoutMs: 120_000,
+          maxTimeoutMs: 300_000,
+        }),
+      },
 
       maxSteps: 30,
       protectedPaths: [".git", ".git/**", ".github/workflows", ".github/workflows/**"],
@@ -177,7 +229,7 @@ export class FlarborAgent extends FlarborEnvironment<Env> {
       ...(token ? { token } : {}),
     });
     await this.gitWorkspace.git.checkout({ ref: task.baseCommit });
-    await this.gitWorkspace.git.checkout({ branch });
+    await this.gitWorkspace.createBranch(branch);
 
     console.log(`[pr-replay] checked_out base=${task.baseCommit.slice(0, 8)} branch=${branch}`);
 
@@ -198,7 +250,11 @@ export class FlarborAgent extends FlarborEnvironment<Env> {
     );
 
     if (saveResult.status === "skipped") {
-      return this.buildFailResult(task, branch, "Inference turn was skipped (concurrent request collision)");
+      return this.buildFailResult(
+        task,
+        branch,
+        "Inference turn was skipped (concurrent request collision)",
+      );
     }
 
     if (this.turnError) {
@@ -212,7 +268,7 @@ export class FlarborAgent extends FlarborEnvironment<Env> {
     }
 
     // --- Verify (before commit so scoring state is preserved even if push fails) ---
-    const rewardResult = await this.runVerification(task, filesChanged);
+    const rewardResult = await this.runVerification(task, filesChanged, branch);
 
     // --- Commit ---
     let commitSha: string;
@@ -270,6 +326,7 @@ export class FlarborAgent extends FlarborEnvironment<Env> {
   private async runVerification(
     task: PRReplayTask,
     filesChanged: string[],
+    branch: string,
   ): Promise<RewardResult> {
     try {
       const referenceDiff = REFERENCE_DIFFS[task.patchFile] ?? "";
@@ -280,15 +337,14 @@ export class FlarborAgent extends FlarborEnvironment<Env> {
         filesChanged,
         success: true,
         referenceDiff,
-        // LLM judge uses the same model as the agent for now.
-        model: createAnthropic({ apiKey: this.env.ANTHROPIC_API_KEY })("claude-sonnet-4-20250514"),
+        sandbox: this.env.Sandbox,
+        sandboxId: sandboxIdFor("verify", [task.id, branch]),
+        // Match Harbor's verifier: no LLM is available there, so this criterion grants full marks.
       });
 
       return toReward(result);
     } catch (err) {
-      console.error(
-        `[pr-replay] verification_error: ${err instanceof Error ? err.message : err}`,
-      );
+      console.error(`[pr-replay] verification_error: ${err instanceof Error ? err.message : err}`);
       // Return a well-formed error result with a single failed criterion.
       return {
         score: 0,
@@ -325,7 +381,7 @@ export class FlarborAgent extends FlarborEnvironment<Env> {
     );
 
     // Even on failure, run verification to get a score (likely 0).
-    const rewardResult = await this.runVerification(task, []);
+    const rewardResult = await this.runVerification(task, [], branch);
 
     return {
       success: false,
@@ -411,9 +467,7 @@ export default {
         req = resolveRunRequest(body, env);
       } catch (err: unknown) {
         if (err instanceof z.ZodError) {
-          console.error(
-            `[pr-replay:worker] validation_error issues=${JSON.stringify(err.issues)}`,
-          );
+          console.error(`[pr-replay:worker] validation_error issues=${JSON.stringify(err.issues)}`);
           return Response.json(
             { success: false, error: "Invalid request", details: err.issues },
             { status: 400 },
@@ -437,7 +491,8 @@ export default {
       // per run. Without this, all runs without an explicit branch would
       // hash to the same DO and reuse workspace/session state.
       const branch =
-        req.branch ?? `flarbor/${task.id}-${Date.now().toString(36)}-${crypto.randomUUID().slice(0, 8)}`;
+        req.branch ??
+        `flarbor/${task.id}-${Date.now().toString(36)}-${crypto.randomUUID().slice(0, 8)}`;
 
       console.log(
         `[pr-replay:worker] dispatching task=${req.taskId} repo=${task.repoUrl}` +
